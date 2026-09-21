@@ -1,0 +1,58 @@
+---
+description: Documentation rules — document decisions and contracts, point at code instead of duplicating it, and keep artifacts traceable.
+alwaysApply: false
+globs:
+  - "**/*.md"
+  - "docs/**"
+  - "tasks/**"
+---
+
+# Documentation rules
+
+## Document decisions and contracts, not code
+
+- **Do not duplicate code in prose.** Point at it with a path, symbol, or semantic anchor. Duplicated
+  code in documentation rots the moment the code changes, and the doc becomes a lie.
+- Document **why**, not **what**. The code already says what; only the author knows why.
+- The most valuable things to document: non-obvious decisions and their rejected alternatives, interface
+  contracts, invariants, operational procedures, and known failure modes.
+
+## Artifact traceability
+
+- Every artifact lives at `tasks/<TASK-ID>/<artifact-name>` and is written by exactly one agent.
+- Every task carries the traceability triplet:
+  - **Requirement trace** — the `AC-*` IDs it satisfies
+  - **Design reference** — the design section it implements
+  - **Quality gate** — which gate must pass before it is done
+- Artifacts reference upstream artifacts **by path**, never by pasted content.
+- Use the shapes declared in `.agent/schemas/`. A validator reads these files; free-form artifacts
+  break the gate checks.
+
+## Keep docs current or delete them
+
+- A stale document is worse than a missing one, because it is trusted.
+- When you change behavior, update the documentation in the same change. "Docs follow in a later PR"
+  means the docs never arrive.
+- When you find documentation that contradicts the code, report it as a finding rather than quietly
+  working around it.
+
+## Writing style
+
+- Lead with the conclusion. State the decision, then the reasoning.
+- Prefer short declarative sentences and concrete nouns. Avoid hedging and filler.
+- Use tables for matrices (permissions, severities, states) and code blocks for shapes and commands.
+- Name files and sections so they are findable by search, not only by navigation.
+- Write in the same language as the surrounding document. Do not mix languages within one file.
+
+## Failure documentation
+
+When a defect is fixed, record it in `docs/knowledge/lessons.yaml` using the five-field schema:
+
+- **Error** — what was observed
+- **Symptom** — how it presented
+- **Root cause** — why it happened
+- **Solution** — what fixed it
+- **Verification** — how the fix was confirmed
+
+The file is capped at 50 entries; drop the oldest when exceeded. An unbounded lessons file becomes
+context bloat and stops being read.

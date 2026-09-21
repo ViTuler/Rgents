@@ -1,0 +1,301 @@
+{
+  "task_id": "TASK-004",
+  "goal": "Allow an organization owner or admin to invite a colleague by email so the colleague can join the organization, with the colleague joining only by an explicit action of their own.",
+  "authorship": {
+    "written_by": "human",
+    "reason": "The product agent could not be dispatched: the orchestrator subagent type was unavailable in the session, so no agent could reach the specification stage. The eight product decisions recorded in task.yaml under product_decisions are the human's own answers; this file folds them into acceptance criteria, business rules and edge cases. No decision here was invented by the author.",
+    "supersedes": "tasks/active/TASK-003/requirements.json",
+    "review_recommended": true
+  },
+  "actors": [
+    {
+      "name": "organization owner",
+      "description": "Full control of the organization, including billing",
+      "permissions": ["invite colleagues", "remove members", "manage billing"]
+    },
+    {
+      "name": "organization admin",
+      "description": "Manages membership but not billing",
+      "permissions": ["invite colleagues", "remove members"]
+    },
+    {
+      "name": "organization member",
+      "description": "A regular member with no membership-management rights",
+      "permissions": ["view the organization"]
+    },
+    {
+      "name": "invited colleague",
+      "description": "The person named by an invitation. May already hold an account, or may not be registered yet.",
+      "permissions": ["accept the invitation addressed to their own email address"]
+    },
+    {
+      "name": "unrelated signed-in user",
+      "description": "A signed-in user whose email address is not the invited address",
+      "permissions": ["may load an invitation link, but may not accept it"]
+    }
+  ],
+  "user_stories": [
+    {
+      "id": "US-1",
+      "story": "As an organization owner or admin, I want to invite a colleague by email address, so that they can join the organization without me setting up their access manually.",
+      "priority": "must"
+    },
+    {
+      "id": "US-2",
+      "story": "As an invited colleague, I want to review an invitation and then accept it deliberately, so that I am not added to an organization without my knowledge.",
+      "priority": "must"
+    },
+    {
+      "id": "US-3",
+      "story": "As an organization owner, I want an invitation to stop working after a bounded period, so that an unused invitation does not remain a way in indefinitely.",
+      "priority": "must"
+    },
+    {
+      "id": "US-4",
+      "story": "As an organization admin, I want to be able to re-invite a colleague whose email went astray, so that I can recover without a dedicated resend feature.",
+      "priority": "should"
+    }
+  ],
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "text": "An organization owner or admin can send an invitation naming an email address, and the resulting invitation refers to that address and to the organization in whose context it was created.",
+      "verification_method": "Send an invitation as an owner and again as an admin; observe an invitation created that names the invited address and that organization.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-2",
+      "text": "A regular member cannot invite a colleague and cannot cause a colleague to join the organization by attempting it.",
+      "verification_method": "Attempt to invite as a regular member and observe refusal, with no invitation created and no membership granted.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-3",
+      "text": "The invited address receives an email containing a link that identifies the invitation and that does not itself grant membership.",
+      "verification_method": "Send an invitation; confirm exactly one message was delivered to the invited address, and that loading its link grants no membership.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-4",
+      "text": "A colleague joins the organization only after an explicit accept action by a person whose email address is the invited address.",
+      "verification_method": "Load the invitation link without accepting and confirm no membership exists; then accept as the invited address and confirm a membership is created.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-5",
+      "text": "A signed-in user whose email address differs from the invited address cannot accept the invitation and does not join the organization by attempting it.",
+      "verification_method": "While signed in as a different address, attempt to accept an invitation and observe refusal with no membership created for either party.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-6",
+      "text": "An invitation expires 7 days after it is created, and after expiry it cannot be accepted.",
+      "verification_method": "Create an invitation, advance time beyond 7 days, attempt to accept, and observe refusal with no membership created.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-7",
+      "text": "A refusal to accept an invitation is indistinguishable across the states unknown, malformed, expired, and already accepted.",
+      "verification_method": "Compare the response and observable behaviour across the four states; they must not be distinguishable from one another.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-8",
+      "text": "An invitation can be accepted at most once, including when acceptance is attempted twice at the same time.",
+      "verification_method": "Accept an invitation, then attempt again and observe refusal. Then create a fresh invitation and issue concurrent acceptances; observe exactly one success.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-9",
+      "text": "The colleague joins as a regular member and receives no elevated permissions as a result of being invited.",
+      "verification_method": "Accept an invitation and confirm the resulting membership carries the regular member role and no administrative capability.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-10",
+      "text": "Inviting an address that is already a member of the organization does not create a second membership.",
+      "verification_method": "Invite an existing member, accept, and confirm exactly one membership exists for that address and organization.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-11",
+      "text": "When an invitation is already outstanding for the same organization and email address, sending a new invitation leaves exactly one outstanding invitation, and the earlier one can no longer be accepted.",
+      "verification_method": "Send two invitations for the same address and organization; confirm the earlier invitation is refused on acceptance and that only one invitation can be accepted successfully.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-12",
+      "text": "An invitation is created for the organization identified in the request, and a caller who holds no owner or admin role in that organization cannot create one for it.",
+      "verification_method": "As a user who is an admin of one organization and only a member of another, attempt to invite in each; observe success only where the caller holds owner or admin.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-13",
+      "text": "A colleague who does not yet hold an account can be invited, and can complete joining, without an account existing when the invitation is created.",
+      "verification_method": "Invite an address with no account, then join from that address and confirm the membership is created.",
+      "priority": "mvp"
+    },
+    {
+      "id": "AC-14",
+      "text": "When an invitation cannot be delivered to the invited address, the colleague does not join and the invitation is not left apparently usable.",
+      "verification_method": "Cause delivery to fail and confirm no membership results and that the outstanding invitation cannot be accepted as though delivery had succeeded.",
+      "priority": "mvp"
+    }
+  ],
+  "business_rules": [
+    {
+      "id": "BR-1",
+      "rule": "Only an owner or admin of an organization may create an invitation for that organization.",
+      "rationale": "A membership is a grant of access to organization data, so the power to create one must match the power to manage membership."
+    },
+    {
+      "id": "BR-2",
+      "rule": "An invitation is valid for 7 days from its creation and cannot be accepted after that.",
+      "rationale": "Bounds how long a leaked invitation remains useful. 7 days is a chosen default, not a measured optimum."
+    },
+    {
+      "id": "BR-3",
+      "rule": "An invitation is bound to the email address it names and is not transferable to any other address.",
+      "rationale": "Consent to join must come from the person who was invited."
+    },
+    {
+      "id": "BR-4",
+      "rule": "Joining requires an explicit accept action by the invited person. Merely loading the invitation link never grants membership.",
+      "rationale": "Mail clients, link scanners and chat previews fetch links automatically. If loading accepted, the invitation would be consumed before the colleague ever saw it."
+    },
+    {
+      "id": "BR-5",
+      "rule": "An invitation is single-use: accepting it consumes it, and concurrent acceptance attempts produce exactly one success.",
+      "rationale": "Prevents replay and duplicate membership."
+    },
+    {
+      "id": "BR-6",
+      "rule": "At most one invitation may be outstanding for the same organization and email address. Creating a new one invalidates the outstanding one.",
+      "rationale": "Keeps acceptance unambiguous and bounds what a leaked invitation can do, while letting an admin recover from a lost email without a dedicated resend feature."
+    },
+    {
+      "id": "BR-7",
+      "rule": "A colleague who is already a member of the organization cannot be added a second time by an invitation.",
+      "rationale": "Membership is a single relationship; a duplicate row would corrupt role resolution."
+    },
+    {
+      "id": "BR-8",
+      "rule": "An invitation grants the regular member role and never an administrative role.",
+      "rationale": "Least privilege. An invitation that could grant admin would let a mistake or a malicious invite silently escalate access."
+    },
+    {
+      "id": "BR-9",
+      "rule": "The invitation token is a credential and must not be stored in a form from which it can be recovered.",
+      "rationale": "A read of the persistence layer must not become a way to join an organization."
+    },
+    {
+      "id": "BR-10",
+      "rule": "Refusals to accept an invitation do not reveal which refusal reason applies.",
+      "rationale": "Distinguishable refusals turn the accept path into an oracle for which invitations exist."
+    }
+  ],
+  "edge_cases": [
+    {
+      "case": "the invitation has expired",
+      "expected": "refused; response and behaviour identical to the unknown-invitation case",
+      "category": "expired"
+    },
+    {
+      "case": "an invitation is already outstanding for the same organization and address",
+      "expected": "the earlier invitation can no longer be accepted; exactly one invitation is outstanding",
+      "category": "duplicate"
+    },
+    {
+      "case": "the invited address is already a member of the organization",
+      "expected": "no second membership is created",
+      "category": "already_done"
+    },
+    {
+      "case": "the same invitation is accepted twice at the same moment",
+      "expected": "exactly one acceptance succeeds and exactly one membership results",
+      "category": "concurrent"
+    },
+    {
+      "case": "a signed-in user whose address is not the invited address attempts to accept",
+      "expected": "refused; the invitation remains acceptable by the invited address",
+      "category": "unauthorized"
+    },
+    {
+      "case": "a caller who holds no role in the target organization attempts to invite",
+      "expected": "refused, with no invitation created for that organization",
+      "category": "unauthorized"
+    },
+    {
+      "case": "a caller who is an admin in organization A attempts to invite into organization B where they are only a member",
+      "expected": "refused for B; success remains possible for A",
+      "category": "unauthorized"
+    },
+    {
+      "case": "the invitation token is unknown, malformed, empty, or of the wrong shape",
+      "expected": "refused; indistinguishable from the expired case and never an error that discloses internal state",
+      "category": "boundary"
+    },
+    {
+      "case": "a mail client, link scanner or chat preview fetches the invitation link",
+      "expected": "no membership is granted and the invitation remains acceptable afterwards",
+      "category": "other"
+    },
+    {
+      "case": "the invitation email cannot be delivered",
+      "expected": "the colleague does not join, and no invitation is left that appears usable",
+      "category": "partial_failure"
+    },
+    {
+      "case": "the invited address is not yet a registered user",
+      "expected": "the invitation is created and can be completed by that address",
+      "category": "boundary"
+    },
+    {
+      "case": "the email address is unusual but valid",
+      "expected": "accepted, and matched consistently with the project's existing address handling so that duplicate and already-member checks agree with it",
+      "category": "boundary"
+    },
+    {
+      "case": "the organization named in the invitation request does not exist or the caller cannot see it",
+      "expected": "refused; no invitation and no membership created",
+      "category": "missing_dependency"
+    },
+    {
+      "case": "the invited address is empty or absent from the request",
+      "expected": "refused; no invitation created",
+      "category": "empty"
+    }
+  ],
+  "out_of_scope": [
+    "creating, renaming, or deleting an organization",
+    "removing a member, or a member leaving an organization",
+    "changing a member's role after they have joined",
+    "inviting more than one colleague in a single action",
+    "a dedicated resend or cancel action (replacing an outstanding invitation covers the lost-email case)",
+    "listing past or pending invitations",
+    "seat limits, billing, or subscription checks on invitations",
+    "invitation analytics, audit history, or reporting",
+    "organization roles beyond owner, admin or member",
+    "joining automatically by email domain"
+  ],
+  "assumptions": [
+    {
+      "assumption": "The project already has a working transactional email transport that the invitation can use.",
+      "impact_if_wrong": "email delivery becomes a separate task, and AC-3 and AC-14 depend on it."
+    },
+    {
+      "assumption": "An organization can already be identified and the caller's role in it can already be determined.",
+      "impact_if_wrong": "AC-12 and BR-1 depend on an authorization mechanism that would have to be built first."
+    },
+    {
+      "assumption": "A person with no account can be guided through account creation as part of joining.",
+      "impact_if_wrong": "AC-13 cannot be satisfied and invitations could only be sent to existing users."
+    },
+    {
+      "assumption": "Address matching for the duplicate and already-member checks uses the project's existing address handling, so a case variant of the same address is treated as the same address.",
+      "impact_if_wrong": "AC-10 and AC-11 could be defeated by sending the same address with different capitalisation."
+    }
+  ],
+  "open_questions": [],
+  "ux_dimension": true
+}

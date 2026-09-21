@@ -1,0 +1,194 @@
+{
+  "task_id": "TASK-004",
+  "authorship": {
+    "written_by": "human",
+    "reason": "The tech-lead agent could not be dispatched because the orchestrator subagent type was unavailable in the session. The plan follows design.json; every acceptance criterion is mapped to at least one step, and parallel groups are declared only for genuinely disjoint file sets.",
+    "review_recommended": true
+  },
+  "affected_files": [
+    "db/migrations/20260920_create_invitations.sql",
+    "src/organizations/invitations/repository.ts",
+    "src/organizations/invitations/email.ts",
+    "src/organizations/invitations/service.ts",
+    "src/organizations/invitations/controller.ts",
+    "src/organizations/routes.ts",
+    "pages/invitations/[token].tsx",
+    "tests/invitations/service.test.ts",
+    "tests/invitations/controller.test.ts"
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "action": "migrate",
+      "file": "db/migrations/20260920_create_invitations.sql",
+      "description": "Create the invitations table with a case-insensitive email column, a unique token_hash, an indexed expires_at, a role column constrained to 'member', and a partial unique index on (organization_id, email) WHERE accepted_at IS NULL. Verify that the membership uniqueness constraint AC-10 depends on already exists; if it does not, add it as a separate additive statement.",
+      "rationale": "Additive only, so the migration is safe while the previous application version is still running, and it needs no backfill.",
+      "depends_on": [],
+      "parallel_group": "database",
+      "risk_level": "medium",
+      "reversible": true,
+      "rollback": "Drop the invitations table and, if it was added, the membership uniqueness constraint. Lossy only for outstanding invitations.",
+      "acceptance_criteria": []
+    },
+    {
+      "order": 2,
+      "action": "create",
+      "file": "src/organizations/invitations/repository.ts",
+      "description": "Repository over the invitations table. Includes findByTokenHash for the read-only preview, and consume for acceptance implemented as a single conditional update: UPDATE invitations SET accepted_at = $now WHERE token_hash = $hash AND accepted_at IS NULL AND expires_at > $now RETURNING *. Also includes invalidateOutstanding(organizationId, email) used by the replacement behaviour.",
+      "rationale": "Single-use and concurrency safety must be properties of one atomic statement, not of a read-then-write sequence in the service (ADR-006).",
+      "depends_on": [1],
+      "parallel_group": "backend",
+      "risk_level": "high",
+      "reversible": true,
+      "rollback": "Revert the file. The table may remain without effect.",
+      "acceptance_criteria": ["AC-8", "AC-11"]
+    },
+    {
+      "order": 3,
+      "action": "create",
+      "file": "src/organizations/invitations/email.ts",
+      "description": "Render and send the invitation email through the existing mail transport port. Builds the link from the plaintext token at send time. Introduces no new transport and never logs the token.",
+      "rationale": "Keeps delivery on the existing configured path and keeps the plaintext token out of any store.",
+      "depends_on": [1],
+      "parallel_group": "backend",
+      "risk_level": "medium",
+      "reversible": true,
+      "rollback": "Revert the file.",
+      "acceptance_criteria": ["AC-3"]
+    },
+    {
+      "order": 4,
+      "action": "create",
+      "file": "src/organizations/invitations/service.ts",
+      "description": "Business rules: require owner or admin on the target organization; refuse when the address is already a member; invalidate any outstanding invitation for the same organization and address, then create the new one with a 256-bit random token and its hash plus a 7-day expiry; send the email inside the same transaction so a delivery failure rolls the invitation back; on acceptance, require the caller's verified address to match, consume the token atomically, and create the membership through the existing membership service in the same transaction; map unknown, malformed, expired and already-consumed tokens onto one uniform not-found outcome.",
+      "rationale": "Keeps HTTP concerns out of the domain and gives every business rule exactly one owner. The uniform mapping implements ADR-007 and the conditional consume implements ADR-006.",
+      "depends_on": [2, 3],
+      "parallel_group": "backend",
+      "risk_level": "high",
+      "reversible": true,
+      "rollback": "Revert the file; the table may remain without effect.",
+      "acceptance_criteria": ["AC-1", "AC-2", "AC-4", "AC-5", "AC-6", "AC-7", "AC-8", "AC-9", "AC-10", "AC-11", "AC-12", "AC-13", "AC-14"]
+    },
+    {
+      "order": 5,
+      "action": "create",
+      "file": "src/organizations/invitations/controller.ts",
+      "description": "HTTP boundary for the three endpoints. Resolves the target organization from the path, applies the existing organization-role guard, shape-checks the address and the token before any lookup, and maps domain outcomes onto the existing error shape. Sets Referrer-Policy: no-referrer for the whole /invitations path. The GET preview is strictly read-only and consumes nothing.",
+      "rationale": "Authorization is evaluated against the organization identified in the request, never against a caller default (AC-12). Shape-checking before lookup keeps malformed input on the same uniform refusal path (ADR-007).",
+      "depends_on": [4],
+      "parallel_group": "backend",
+      "risk_level": "medium",
+      "reversible": true,
+      "rollback": "Revert the file.",
+      "acceptance_criteria": ["AC-1", "AC-2", "AC-3", "AC-4", "AC-7", "AC-12"]
+    },
+    {
+      "order": 6,
+      "action": "modify",
+      "file": "src/organizations/routes.ts",
+      "description": "Register the three invitation routes on the existing router, with the accept route requiring authentication and the preview route unauthenticated.",
+      "rationale": "Follows the existing route registration convention.",
+      "depends_on": [5],
+      "parallel_group": "backend",
+      "risk_level": "low",
+      "reversible": true,
+      "rollback": "Revert the file.",
+      "acceptance_criteria": ["AC-1"]
+    },
+    {
+      "order": 7,
+      "action": "create",
+      "file": "pages/invitations/[token].tsx",
+      "description": "Invitation landing page implementing the states UX specifies: loading, valid, invalid, wrong-account, delivery-failed and the account-creation path for an address with no account. Loads the preview, presents the invitation, and issues the accept POST only in response to an explicit user action. Never auto-submits on load. Loads no third-party resources.",
+      "rationale": "Separating read from accept is what makes a link prefetch harmless (ADR-008). The generic invalid state is required because refusal must not disclose which reason applies (ADR-007).",
+      "depends_on": [5],
+      "parallel_group": "frontend",
+      "risk_level": "medium",
+      "reversible": true,
+      "rollback": "Revert the file.",
+      "acceptance_criteria": ["AC-3", "AC-4", "AC-5", "AC-13"]
+    },
+    {
+      "order": 8,
+      "action": "test",
+      "file": "tests/invitations/service.test.ts",
+      "description": "Service-level tests: authorization by role and by target organization, already-member refusal, replacement of an outstanding invitation, the 7-day expiry boundary on both sides, single-use consumption, the uniform not-found mapping across all four unusable states, and membership created with the regular member role.",
+      "rationale": "Behaviour-level coverage of every rule the service owns, derived from the acceptance criteria rather than from the implementation.",
+      "depends_on": [4],
+      "parallel_group": "tests",
+      "risk_level": "low",
+      "reversible": true,
+      "rollback": "Revert the file.",
+      "acceptance_criteria": ["AC-2", "AC-6", "AC-7", "AC-8", "AC-9", "AC-10", "AC-11", "AC-12", "AC-13", "AC-14"]
+    },
+    {
+      "order": 9,
+      "action": "test",
+      "file": "tests/invitations/controller.test.ts",
+      "description": "Endpoint tests: successful invitation creation, refusal for a caller with no owner or admin role in the target organization, address mismatch on accept, a link prefetch that grants nothing, concurrent acceptance of one token yielding exactly one success, and the referrer policy header on the invitation path.",
+      "rationale": "Covers the HTTP-boundary behaviours that the service tests cannot reach, including the prefetch and concurrency cases that are the highest-risk regressions in this feature.",
+      "depends_on": [5, 6],
+      "parallel_group": "tests",
+      "risk_level": "low",
+      "reversible": true,
+      "rollback": "Revert the file.",
+      "acceptance_criteria": ["AC-1", "AC-2", "AC-4", "AC-5", "AC-7", "AC-8", "AC-12"]
+    }
+  ],
+  "acceptance_mapping": {
+    "AC-1": "steps 4-6: an owner or admin can create an invitation for the organization named in the request, and the endpoint returns the created invitation",
+    "AC-2": "steps 4-5 plus test steps 8-9: the role guard and the service authorization rule refuse a regular member, and no invitation is created",
+    "AC-3": "step 3 sends the email and step 5 exposes a read-only link; test step 9 confirms delivery and that loading the link grants nothing",
+    "AC-4": "step 5 keeps the preview read-only and step 7 issues accept only on an explicit action; test step 9 covers the prefetch case",
+    "AC-5": "step 4 requires the caller's verified address to equal the invited address; test steps 8-9 cover the mismatch case",
+    "AC-6": "step 4 sets a 7-day expiry and step 2 requires expires_at > now() in the consume; test step 8 covers both sides of the boundary",
+    "AC-7": "step 4 maps all four unusable states onto one not-found outcome and step 5 shape-checks before lookup; test step 8 asserts they are indistinguishable",
+    "AC-8": "step 2 implements the conditional consume; test steps 8-9 cover sequential replay and concurrent acceptance",
+    "AC-9": "step 4 creates the membership as a regular member and step 1 constrains the stored role to 'member'; test step 8 asserts the resulting role",
+    "AC-10": "step 4 refuses when the address is already a member and step 1 verifies the membership uniqueness constraint; test step 8 asserts exactly one membership",
+    "AC-11": "step 2 provides invalidateOutstanding and step 1 adds the partial unique index that enforces the invariant; test step 8 asserts the earlier invitation can no longer be accepted",
+    "AC-12": "step 5 resolves the target organization from the path and applies the guard against it, never against a caller default; test steps 8-9 cover a caller with different roles in two organizations",
+    "AC-13": "step 4 stores the address without requiring an account and step 7 covers the account-creation path; test step 8 invites an address with no account",
+    "AC-14": "step 4 sends the email inside the creating transaction so a delivery failure rolls the invitation back; test step 8 asserts no usable invitation survives a failed send"
+  },
+  "parallel_groups": [
+    {
+      "group": "database",
+      "steps": [1],
+      "rationale": "Must complete first; everything else depends on the table existing."
+    },
+    {
+      "group": "backend",
+      "steps": [2, 3, 4, 5, 6],
+      "rationale": "Declared for readability. Executed sequentially because each step consumes the previous step's interface."
+    },
+    {
+      "group": "frontend",
+      "steps": [7],
+      "rationale": "Depends on the frozen controller interface from step 5, so it touches a disjoint file set from the test steps and may run alongside them."
+    },
+    {
+      "group": "tests",
+      "steps": [8, 9],
+      "rationale": "Two disjoint test files with no shared fixtures, so they may run concurrently with each other."
+    }
+  ],
+  "specialists_required": [
+    { "specialist": "security", "reason": "Bearer credential granting membership, address match as an authorization condition, token in a URL, stored personal data" },
+    { "specialist": "database", "reason": "New table, partial unique index, atomic conditional update, case-insensitive address matching" },
+    { "specialist": "ux", "reason": "New landing page with six states including a deliberately generic refusal" }
+  ],
+  "gates_required": ["database", "qa", "security", "ux", "review"],
+  "complexity": "standard",
+  "estimated_touched_layers": ["frontend", "backend", "database"],
+  "self_assessment": {
+    "confidence": "medium",
+    "uncertainty_areas": [
+      "Whether a uniqueness constraint on memberships (organization_id, user_id or email) already exists; step 1 verifies and only adds it if absent.",
+      "Whether the project's existing address type is case-insensitive; the design assumes it is and step 1 depends on that assumption.",
+      "Where account creation for an invited address belongs; step 7 covers the path but the signup flow itself is outside this task."
+    ],
+    "recommendation": "Proceed. The uncertainties are confined to step 1 and step 7 and do not invalidate the interface contracts. The design deliberately leaves rate limiting undesigned so that the security gate can assess it as an open gap rather than assume it is covered."
+  },
+  "created_at": "2026-09-20"
+}

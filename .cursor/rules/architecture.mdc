@@ -1,0 +1,61 @@
+---
+description: Architecture rules — fit the existing system, freeze interfaces before implementing, keep changes reversible, and record decisions. Applies to any design or structural change.
+alwaysApply: false
+globs:
+  - "**/*.md"
+  - "src/**"
+  - "**/architecture/**"
+---
+
+# Architecture rules
+
+## Fit the system before improving it
+
+- Read the existing architecture overview and ADRs (`docs/architecture/`) before proposing structure.
+- **The existing architecture is the default.** Adopting it requires no justification; departing from it does.
+- Every new abstraction, layer, or module boundary needs a stated reason: what existing mechanism is
+  insufficient, and why.
+- **Never introduce a second way to do something that already has a way.** Two patterns for one problem
+  is how a codebase becomes unmaintainable.
+
+## Interfaces before implementations
+
+- Freeze interface contracts (endpoints, signatures, event shapes, schemas) **before** parallel
+  implementation begins. Parallel work is only safe when the contract is stable.
+- A change to a published interface is a breaking change until proven otherwise. Check consumers.
+- Prefer additive evolution (new optional field, new endpoint, new event version) over mutation.
+- Keep public surface small. Every exported symbol is a maintenance commitment.
+
+## Dependency decisions
+
+- **Prefer no new dependency.** Justify each one against: what it replaces, its maintenance status, its
+  transitive footprint, its license, and whether the standard library suffices.
+- Never add a dependency for something expressible in a few lines of the host language.
+- Pin versions through the project's existing mechanism (lockfile), not by convention.
+
+## Reversibility
+
+- Design for rollback: additive migrations before destructive ones (expand/contract), feature flags for
+  risky behavior, and backward-compatible deploys.
+- If a design cannot be reversed, that is an explicit risk to record and escalate.
+
+## Record decisions
+
+- Any non-obvious, hard-to-reverse decision gets an ADR in `docs/architecture/decisions.md`:
+  **context, decision, consequences, alternatives considered.**
+- Record the alternatives you rejected. A decision without its rejected alternatives will be re-litigated.
+- If you cannot explain a design choice in two sentences, it is probably not understood well enough yet.
+
+## Boundaries
+
+- Layering is a contract: do not reach across layers, and do not bypass an abstraction that exists for
+  exactly this purpose.
+- Business logic does not belong in transport, persistence, or presentation layers.
+- Shared mutable state across module boundaries requires an explicit, documented owner.
+
+## Complexity budget
+
+- Every new concept, layer, and indirection has a cost paid by every future maintainer.
+- Speculative generality — configurability, extension points, and indirection with exactly one caller —
+  is a defect, not foresight.
+- The simplest design that satisfies the acceptance criteria wins.

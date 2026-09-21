@@ -1,0 +1,37 @@
+---
+description: <What this rule enforces, in one line.>
+alwaysApply: false
+globs:
+  - "<glob this rule applies to>"
+---
+
+<!--
+Template for a new rule.
+
+A rule answers "what applies to everyone doing this kind of work".
+An agent answers "what is my role". Do not put role-specific instructions in a rule.
+
+Frontmatter:
+  description   required. One line; used for relevance matching when alwaysApply is false.
+  alwaysApply   true  -> injected into every agent's context. Reserve for non-negotiables.
+                false -> activated by description relevance or by `globs`.
+  globs         optional list of file patterns that trigger the rule.
+
+Guidance:
+  * Keep agent-specific duties in the agent file. A rule duplicated into an agent drifts.
+  * State the rule, then the reason briefly. Rules without reasons get worked around.
+  * Use "Never" for hard prohibitions and "Prefer" for genuine trade-offs. Do not blur them.
+  * If a rule can be checked mechanically, add the check to .agent/tools/validate.py instead —
+    an executable invariant beats a written one.
+-->
+
+# <Rule title>
+
+## <Section>
+
+- ...
+- ...
+
+## Never
+
+- ...

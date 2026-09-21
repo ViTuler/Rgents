@@ -1,0 +1,213 @@
+{
+  "task_id": "TASK-004",
+  "authorship": {
+    "written_by": "human",
+    "reason": "The tech-lead agent could not be dispatched because the orchestrator subagent type was unavailable in the session. The design follows the approved requirements and invents no product behaviour; every constraint traces to a business rule or an acceptance criterion.",
+    "review_recommended": true
+  },
+  "summary": "Add an invitations module to the existing organization service. A token-backed Invitation entity is created by an owner or admin, delivered by email, and consumed exactly once by a deliberate accept action from the invited address. The accept action is a conditional database update, so single-use and concurrency safety are properties of the persistence layer rather than of application-level check-then-act logic. Authorization reuses the existing organization-role guard and no new abstraction is introduced.",
+  "architecture": {
+    "overview": "The organization service already exposes role-guarded endpoints over a controller/service/repository layering. The invitation endpoints are added to that same surface and reuse its guard, its repository conventions, its transactional boundary and its error shape. Membership creation stays in the existing membership service so that role assignment has a single owner.",
+    "components": [
+      {
+        "name": "InvitationController",
+        "responsibility": "HTTP boundary for the three invitation endpoints. Parses and shape-checks input, resolves the target organization from the request, applies the existing role guard, maps domain outcomes onto the existing error shape.",
+        "depends_on": ["InvitationService", "OrganizationRoleGuard"],
+        "files": ["src/organizations/invitations/controller.ts"]
+      },
+      {
+        "name": "InvitationService",
+        "responsibility": "Owns the invitation business rules: authorization outcome handling, duplicate suppression by replacing the outstanding invitation, token generation and hashing, expiry, and mapping every non-acceptable state onto one uniform not-found outcome.",
+        "depends_on": ["InvitationRepository", "MembershipService", "MailPort", "Clock"],
+        "files": ["src/organizations/invitations/service.ts"]
+      },
+      {
+        "name": "InvitationRepository",
+        "responsibility": "Persistence for the Invitation entity, including the atomic conditional consume that enforces single-use.",
+        "depends_on": [],
+        "files": ["src/organizations/invitations/repository.ts"]
+      },
+      {
+        "name": "InvitationEmail",
+        "responsibility": "Renders the invitation email and sends it through the existing mail transport port. Holds the plaintext token only for the duration of the send.",
+        "depends_on": ["MailPort"],
+        "files": ["src/organizations/invitations/email.ts"]
+      },
+      {
+        "name": "InvitationLandingPage",
+        "responsibility": "Reads an invitation and presents it, then performs the accept action only on an explicit user action. Implements the loading, valid, expired-or-invalid, already-accepted, wrong-account and delivery-failed states.",
+        "depends_on": ["InvitationController"],
+        "files": ["pages/invitations/[token].tsx"]
+      }
+    ],
+    "data_flow": "POST /organizations/{organizationId}/invitations -> role guard (target organization from the path) -> InvitationController -> InvitationService (check already-member, replace outstanding invitation, generate token, store hash with expiry) -> InvitationRepository -> InvitationEmail -> mail transport. GET /invitations/{token} -> read-only preview, consumes nothing. POST /invitations/{token}/accept -> authenticated; InvitationService verifies the caller's address matches the invitation, atomically consumes the token, then MembershipService creates the membership in one transaction.",
+    "fits_existing": "Reuses the existing organization-role guard, the existing controller/service/repository layering, the existing membership creation path, the existing mail transport port, the existing error response shape, and the existing database transaction helper. No new abstraction is introduced: the only new concepts are one entity and one module.",
+    "new_abstractions": []
+  },
+  "interfaces": [
+    {
+      "name": "POST /organizations/{organizationId}/invitations",
+      "kind": "http",
+      "specification": "Authenticated. Body: { email: string }. Requires owner or admin on the organization identified by the path. 201 -> { id, email, role: 'member', expires_at }. 403 when the caller holds no owner or admin role in that organization. 409 when the address is already a member. 422 when the email is absent or malformed. Replaces any outstanding invitation for the same organization and email, so exactly one is ever outstanding. Refs AC-1, AC-2, AC-10, AC-11, AC-12.",
+      "breaking_change": false,
+      "consumers": ["organization members settings page"]
+    },
+    {
+      "name": "GET /invitations/{token}",
+      "kind": "http",
+      "specification": "Unauthenticated, read-only, consumes nothing. 200 -> { organization_name, email, role, expires_at, state } where state is one of 'valid' | 'invalid'. The endpoint returns 200 with state 'invalid' for unknown, malformed, expired and already-accepted tokens rather than distinguishing them, so that it is not an oracle. Refs AC-3, AC-4, AC-7, BR-4, BR-10.",
+      "breaking_change": false,
+      "consumers": ["invitation landing page"]
+    },
+    {
+      "name": "POST /invitations/{token}/accept",
+      "kind": "http",
+      "specification": "Authenticated. Requires an explicit user action, never a link prefetch. Body: none. The caller's verified email address must equal the invitation's address. 200 -> { organization_id, role }. 404 with an identical body for unknown, malformed, expired and already-consumed tokens. 403 when the signed-in address differs from the invited address. 409 when the caller is already a member. Refs AC-4, AC-5, AC-6, AC-7, AC-8, AC-9.",
+      "breaking_change": false,
+      "consumers": ["invitation landing page"]
+    },
+    {
+      "name": "InvitationRepository.consume(tokenHash, now)",
+      "kind": "function",
+      "specification": "Returns the consumed invitation row or null. Implemented as a single conditional update: UPDATE invitations SET accepted_at = $now WHERE token_hash = $hash AND accepted_at IS NULL AND expires_at > $now RETURNING *. A null result means the token was unknown, malformed, expired or already consumed, and the caller maps all four onto one uniform not-found outcome. Must be race-free under concurrent invocations by construction, not by surrounding application logic. Refs AC-6, AC-7, AC-8, BR-5, BR-10.",
+      "breaking_change": false,
+      "consumers": ["InvitationService"]
+    },
+    {
+      "name": "Invitation.email (data shape)",
+      "kind": "file_format",
+      "specification": "Stored as the project's existing case-insensitive address type, so that duplicate and already-member checks agree with address comparison elsewhere. The value is personal data: it is stored only on the invitation and on the resulting membership, is never logged, and is never returned to a caller other than the invitation's own preview. Refs BR-3, BR-9.",
+      "breaking_change": false,
+      "consumers": ["InvitationService", "MembershipService"]
+    }
+  ],
+  "data_model": {
+    "entities": [
+      {
+        "name": "Invitation",
+        "fields": [
+          { "name": "id", "type": "uuid", "nullable": false, "constraints": ["primary key"], "indexed": true },
+          { "name": "organization_id", "type": "uuid", "nullable": false, "constraints": ["foreign key -> organizations.id", "on delete cascade"], "indexed": true },
+          { "name": "email", "type": "citext", "nullable": false, "indexed": true, "description": "Case-insensitive to match the project's existing address handling." },
+          { "name": "role", "type": "text", "nullable": false, "constraints": ["check (role = 'member')"], "description": "Constrained to 'member' in the schema, so BR-8 cannot be violated by application code." },
+          { "name": "token_hash", "type": "text", "nullable": false, "constraints": ["unique"], "indexed": true, "description": "Hash of a 256-bit random token. The plaintext is never stored; see ADR-005." },
+          { "name": "expires_at", "type": "timestamptz", "nullable": false, "indexed": true },
+          { "name": "accepted_at", "type": "timestamptz", "nullable": true, "description": "Null means outstanding. Set exactly once by the conditional consume." },
+          { "name": "created_at", "type": "timestamptz", "nullable": false }
+        ]
+      }
+    ],
+    "migration_required": true,
+    "migration_reversible": true,
+    "migration_notes": "Additive only: one new table, its indexes, and a partial unique index on (organization_id, email) WHERE accepted_at IS NULL which encodes BR-6 in the schema rather than trusting the service. No existing table is altered, so the migration is safe while the previous application version is running and requires no backfill. The down migration drops the table; it is lossy only for outstanding invitations. The membership uniqueness constraint that AC-10 depends on must be verified as already present; if it is absent it is added as a separate, also-additive step."
+  },
+  "dependencies": [],
+  "adrs": [
+    {
+      "id": "ADR-005",
+      "title": "Store the invitation token hashed, never in plaintext",
+      "context": "The token is a bearer credential: presenting it, together with the matching signed-in address, grants organization membership. Storing it in plaintext makes any read of the invitations table directly equivalent to a set of usable invitations.",
+      "decision": "Generate a 256-bit random token, return it only inside the email link, and persist only its hash. Acceptance hashes the presented token and looks it up by hash.",
+      "consequences": "A leaked database snapshot yields no usable invitation. An administrator cannot be shown an existing invitation link, which is acceptable because resending is out of scope and replacing an outstanding invitation covers the lost-email case.",
+      "alternatives_rejected": [
+        "plaintext token with a short expiry (a short window is still a window, and it removes the defence entirely)",
+        "signed stateless token with no stored record (cannot be single-use or revocable without a store, and makes BR-5 unimplementable)"
+      ]
+    },
+    {
+      "id": "ADR-006",
+      "title": "Enforce single-use with a conditional update, not with application-level checks",
+      "context": "BR-5 requires that concurrent acceptances produce exactly one success. A read-then-write sequence in the service has a window in which two requests both observe the invitation as outstanding and both proceed to create a membership.",
+      "decision": "Consumption is a single conditional UPDATE whose WHERE clause requires accepted_at IS NULL and expires_at > now(). A caller that matches no row has lost the race or presented an unusable token, and is refused.",
+      "consequences": "AC-8 holds under any concurrency level without locking in application code. The database is the arbiter, which also means the guarantee survives a future service rewrite or a second service that consumes invitations.",
+      "alternatives_rejected": [
+        "application-level check-then-act (racy by construction; passing tests would only mean the race was not hit)",
+        "row-level lock held across the membership creation (correct but orders of magnitude more contention, and unnecessary because the conditional update is already atomic)"
+      ]
+    },
+    {
+      "id": "ADR-007",
+      "title": "Make refusal indistinguishable across all non-acceptable token states",
+      "context": "BR-10 requires that refusal does not reveal which reason applies. If an expired invitation answers differently from a never-existent one, the accept path becomes an oracle for whether a given token was ever valid, which is useful to an attacker enumerating invitations.",
+      "decision": "Unknown, malformed, expired and already-accepted tokens all produce one identical not-found outcome. Malformed input is rejected on shape before any lookup, and also maps onto that same outcome rather than a distinct validation error.",
+      "consequences": "A colleague following an expired link cannot be told specifically that it expired; the landing page explains generically that the link is no longer usable. This is a deliberate usability cost accepted in exchange for removing the oracle. AC-7 is directly checkable by comparing the four responses.",
+      "alternatives_rejected": [
+        "distinct 410 Gone for expired invitations (clearer to users, and precisely the information BR-10 forbids disclosing)",
+        "a preview endpoint that reports validity before acceptance (a more convenient oracle than the accept path itself)"
+      ]
+    },
+    {
+      "id": "ADR-008",
+      "title": "Read and accept are separate actions, so a link prefetch cannot consume an invitation",
+      "context": "BR-4 requires that loading the invitation link never grants membership. Mail clients, corporate link scanners and chat previews fetch URLs automatically and without the recipient's involvement.",
+      "decision": "GET /invitations/{token} is strictly read-only. Acceptance is a separate authenticated POST that the landing page issues only in response to an explicit user action. The invitation link never points at the accept endpoint.",
+      "consequences": "AC-4 holds and the prefetch edge case is structurally impossible rather than merely unlikely. The landing page must carry the state that acceptance is pending, and must not auto-submit on load.",
+      "alternatives_rejected": [
+        "a single GET link that accepts (would let a scanner consume the invitation before the recipient ever opened it, producing an unexplainable 'link no longer valid' experience)",
+        "an accept link with a short-lived confirmation token (adds a second token and a second lifetime for no benefit over an explicit action on a page)"
+      ]
+    },
+    {
+      "id": "ADR-009",
+      "title": "Replace an outstanding invitation rather than rejecting a duplicate",
+      "context": "BR-6 requires at most one outstanding invitation per organization and address, and the requirements deliberately exclude a dedicated resend action while US-4 asks that an admin be able to recover from a lost email.",
+      "decision": "Creating an invitation for an address that already has one outstanding invalidates the outstanding invitation in the same transaction and creates the new one. Enforced by a partial unique index on (organization_id, email) WHERE accepted_at IS NULL, so the invariant holds in the schema and not only in the service.",
+      "consequences": "US-4 is satisfied without adding a feature, and the invariant cannot be broken by a code path that forgets to check. The earlier email stops working, which is the intended behaviour but is worth stating in the invitation copy.",
+      "alternatives_rejected": [
+        "reject the duplicate with 409 (simplest, but leaves an admin who lost the email with no recoverable path at all, since resend is out of scope)",
+        "allow multiple outstanding invitations (makes acceptance ambiguous and multiplies the effect of a leak)"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "risk": "The token leaks through a referrer header or a third-party resource loaded by the landing page",
+      "likelihood": "medium",
+      "impact": "high",
+      "detection": "Inspect the landing page's external resource requests and response headers",
+      "mitigation": "Send Referrer-Policy: no-referrer on the whole /invitations path, and load no third-party resources on the landing page"
+    },
+    {
+      "risk": "Address matching is inconsistent, so the already-member and duplicate checks disagree with the accept-time ownership check",
+      "likelihood": "medium",
+      "impact": "medium",
+      "detection": "Test the same address in differing capitalisation against all three checks",
+      "mitigation": "Use the project's existing case-insensitive address type for the invitation and for all comparisons, and test the variant explicitly"
+    },
+    {
+      "risk": "The plaintext token is logged or persisted by an intermediate layer while being sent",
+      "likelihood": "low",
+      "impact": "high",
+      "detection": "Inspect what the mail adapter and request logging record during an invitation send",
+      "mitigation": "Never log the token; construct the link at the last moment; keep the plaintext out of any returned payload other than the email body"
+    },
+    {
+      "risk": "Mail delivery fails but the invitation remains outstanding, so the admin believes the colleague was reached",
+      "likelihood": "medium",
+      "impact": "low",
+      "detection": "Cause the transport to throw during creation and inspect the resulting state",
+      "mitigation": "Send within the creation transaction and roll the invitation back on failure, returning an error rather than a success (AC-14)"
+    },
+    {
+      "risk": "Replacing an outstanding invitation is implemented as a delete, losing the earlier invitation's audit value",
+      "likelihood": "low",
+      "impact": "low",
+      "detection": "Review the replacement implementation",
+      "mitigation": "Invalidate by setting accepted_at or an explicit invalidated_at rather than deleting the row"
+    }
+  ],
+  "irreversible_steps": [],
+  "not_designed": [
+    "rate limiting on invitation creation (flagged to security as a known gap; the design does not assume it)",
+    "cleanup of expired and invalidated invitation rows, and any retention policy for the stored address",
+    "a dedicated resend, cancel or list-invitations surface",
+    "choosing or changing a member's role after joining",
+    "account creation for an invited address that has no account (assumed to exist already)"
+  ],
+  "specialists_required": [
+    { "specialist": "security", "reason": "An authenticated endpoint creates a bearer credential that grants membership from an address match; a stored address is personal data; the landing page carries a token in a URL.", "design_time_consultation": false },
+    { "specialist": "database", "reason": "A new table with a partial unique index, an atomic conditional update that must be race-free, and a case-insensitive address column that must agree with existing comparisons.", "design_time_consultation": false },
+    { "specialist": "ux", "reason": "A new landing page with valid, invalid, wrong-account, delivery-failed and account-creation states, and copy that must explain a deliberately generic refusal.", "design_time_consultation": false }
+  ],
+  "created_at": "2026-09-20"
+}

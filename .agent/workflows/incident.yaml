@@ -1,0 +1,140 @@
+# Incident workflow — production is degraded or down. Optimization target is restoration, not elegance.
+# This workflow intentionally inverts the normal order: mitigate first, understand second, review last.
+# Every other workflow optimizes for correctness; this one optimizes for time-to-restore.
+
+name: incident
+description: Restore service under time pressure, then prove the fix and prevent recurrence.
+
+entry:
+  command: /triage
+  agent: orchestrator
+
+priority: >
+  Restoration outranks process. Evidence capture is mandatory but must never delay mitigation.
+  A working mitigation with a documented gap beats a perfect diagnosis during an outage.
+
+stages:
+
+  - id: intake
+    agent: orchestrator
+    artifact: intake.json
+    description: >
+      Severity, user impact, blast radius, and whether a human incident owner is engaged. Compare the
+      request against every active task and record the result in overlap_check — during an incident
+      this is deliberately cheap: an overlap is recorded and reported, not adjudicated before
+      mitigation begins.
+    required: true
+    gates: [duplicate_check]
+    rule: >
+      Establish severity and impact first. Everything downstream is prioritized by blast radius,
+      not by technical interest.
+    human_notification: always
+
+  - id: triage_evidence
+    agent: qa
+    artifact: qa-report.json
+    reads: [intake.json]
+    description: >
+      Capture the current observable state before anyone changes it: failing checks, error output,
+      timings, affected scope. This is the evidence that will be unrecoverable once mitigation begins.
+    required: true
+    rule: Capture state before mutating it. Post-mitigation forensics is guesswork.
+
+  - id: mitigation
+    agent: developer
+    artifact: worker-result.json
+    reads: [qa-report.json]
+    description: >
+      The smallest change that restores service. Rollback or feature-flag disable is strongly preferred
+      over a forward fix under time pressure.
+    required: true
+    gates: [environment_confirmed]
+    rule: >
+      Mitigate first, fix properly afterwards. A mitigation that is hard to reverse is a second incident.
+      During an incident the environment confirmation is deliberately compressed: state which environment
+      you are acting in and get a one-word confirmation before a mutating command. Do not run a
+      mitigation against an environment you have not identified.
+    on_unable_to_mitigate: escalate_to_human
+
+  - id: security
+    agent: security
+    artifact: security-report.json
+    reads: [worker-result.json, qa-report.json]
+    description: >
+      Determine whether the incident was caused by — or exposed — a security issue. Run in parallel
+      with verification; do not delay mitigation for it.
+    condition: specialists includes security
+    stage_position: parallel_with_qa
+    blocking: true
+
+  - id: qa
+    agent: qa
+    artifact: qa-report.json
+    reads: [worker-result.json, requirements.json]
+    description: >
+      Verify service is genuinely restored — not merely that the error stopped appearing — and
+      that the mitigation did not break adjacent behavior.
+    required: true
+    blocking: true
+    on_fail: mitigation
+
+  - id: database_review
+    agent: database
+    artifact: db-report.json
+    reads: [worker-result.json]
+    description: Assess whether the incident or mitigation affected data integrity, and whether any repair is required.
+    condition: specialists includes database
+    stage_position: parallel_with_qa
+    blocking: true
+
+  - id: review
+    agent: reviewer
+    artifact: review-report.json
+    reads: [worker-result.json, qa-report.json, design.json]
+    description: >
+      Review the mitigation for correctness and the permanent fix for fitness. A mitigation is
+      explicitly allowed to be inelegant — it is not allowed to be unsafe or unexplained.
+    required: true
+    blocking: true
+
+  - id: postmortem
+    agent: orchestrator
+    artifact: task.yaml
+    reads: [qa-report.json, worker-result.json, review-report.json]
+    description: >
+      Blameless postmortem: timeline, root cause, contributing factors, what detected it, what
+      delayed detection, and the prevention tasks. Append lessons; open follow-up tasks for
+      anything deferred.
+    required: true
+    rule: >
+      A postmortem that produces no follow-up task and no lesson entry has not happened.
+      Prevention work becomes new tasks — never scope added to this incident.
+
+  - id: prevention_verification
+    agent: qa
+    artifact: qa-report.json
+    reads: [task.yaml]
+    description: >
+      Confirm a regression test or monitoring check now exists that would catch this class of
+      failure earlier. Without it, the incident is recurring on a timer.
+    required: true
+
+gates_in_order: [qa, security, database_review, review, prevention_verification]
+
+rework:
+  route_to:
+    implementation_defect: developer
+    requirement_defect: product
+    design_defect: tech-lead
+    test_defect: qa
+    unclear_scope: orchestrator
+  re_enter_at: qa
+  max_total_cycles: 5      # incidents get a larger budget; restoration outranks process
+
+detection_review:
+  questions:
+    - "What first signaled the problem, and how long after impact began?"
+    - "Did existing monitoring catch it, or did a user report it?"
+    - "Which signal was missing, and what is the cheapest check that would have caught it?"
+    - "What made this hard to diagnose?"
+  artifact: task.yaml

@@ -1,0 +1,169 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "design.schema.json",
+  "title": "design.json",
+  "description": "Technical design. Sole writer: tech-lead. Interfaces here are what downstream agents implement against, so ambiguity becomes drift.",
+  "type": "object",
+  "required": ["task_id", "summary", "architecture", "interfaces"],
+  "additionalProperties": true,
+  "properties": {
+    "task_id": { "type": "string", "pattern": "^TASK-[0-9]{3,}$" },
+    "summary": { "type": "string", "minLength": 20, "description": "The approach in a short paragraph." },
+    "architecture": {
+      "type": "object",
+      "required": ["components"],
+      "properties": {
+        "overview": { "type": "string", "description": "Narrative and/or diagram of the solution." },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["name", "responsibility"],
+            "properties": {
+              "name": { "type": "string" },
+              "responsibility": { "type": "string" },
+              "depends_on": { "type": "array", "items": { "type": "string" } },
+              "files": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "data_flow": { "type": "string" },
+        "fits_existing": {
+          "type": "string",
+          "description": "How this design adopts existing patterns. Required by .cursor/rules/architecture.mdc."
+        },
+        "new_abstractions": {
+          "type": "array",
+          "description": "Each new abstraction must state why existing mechanisms are insufficient.",
+          "items": {
+            "type": "object",
+            "required": ["name", "justification"],
+            "properties": {
+              "name": { "type": "string" },
+              "justification": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "interfaces": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Exact signatures: endpoints, function contracts, event shapes, CLI surfaces. Implementation follows these.",
+      "items": {
+        "type": "object",
+        "required": ["name", "kind", "specification"],
+        "properties": {
+          "name": { "type": "string" },
+          "kind": { "type": "string", "enum": ["http", "function", "event", "cli", "graphql", "grpc", "file_format", "other"] },
+          "specification": { "type": "string", "description": "The full contract: inputs, outputs, errors, status codes." },
+          "breaking_change": { "type": "boolean", "default": false },
+          "consumers": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "data_model": {
+      "type": "object",
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "fields"],
+            "properties": {
+              "name": { "type": "string" },
+              "fields": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "type"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "type": { "type": "string" },
+                    "nullable": { "type": "boolean" },
+                    "constraints": { "type": "array", "items": { "type": "string" } },
+                    "indexed": { "type": "boolean" },
+                    "description": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "migration_required": { "type": "boolean" },
+        "migration_reversible": { "type": "boolean" },
+        "migration_notes": { "type": "string" }
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "Prefer no new dependency. Each addition states what it replaces and why the alternative was rejected.",
+      "items": {
+        "type": "object",
+        "required": ["name", "reason"],
+        "properties": {
+          "name": { "type": "string" },
+          "reason": { "type": "string" },
+          "alternative_considered": { "type": "string" },
+          "is_new": { "type": "boolean" }
+        }
+      }
+    },
+    "adrs": {
+      "type": "array",
+      "description": "Non-obvious, hard-to-reverse decisions. Record rejected alternatives or the decision will be re-litigated.",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "context", "decision"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^ADR-[0-9]+$" },
+          "title": { "type": "string" },
+          "context": { "type": "string" },
+          "decision": { "type": "string" },
+          "consequences": { "type": "string" },
+          "alternatives_rejected": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "description": "What could invalidate this design, and how it would be detected early.",
+      "items": {
+        "type": "object",
+        "required": ["risk"],
+        "properties": {
+          "risk": { "type": "string" },
+          "likelihood": { "type": "string", "enum": ["low", "medium", "high"] },
+          "impact": { "type": "string", "enum": ["low", "medium", "high"] },
+          "detection": { "type": "string" },
+          "mitigation": { "type": "string" }
+        }
+      }
+    },
+    "irreversible_steps": {
+      "type": "array",
+      "description": "Steps that cannot be undone require a human decision before execution.",
+      "items": { "type": "string" }
+    },
+    "not_designed": {
+      "type": "array",
+      "description": "Explicitly left open, so the developer does not invent it.",
+      "items": { "type": "string" }
+    },
+    "specialists_required": {
+      "type": "array",
+      "description": "Reconciled by the orchestrator against .agent/config.yaml. Disagreements must be stated, not silent.",
+      "items": {
+        "type": "object",
+        "required": ["specialist", "reason"],
+        "properties": {
+          "specialist": { "type": "string", "enum": ["ux", "security", "devops", "database", "data", "performance"] },
+          "reason": { "type": "string" },
+          "design_time_consultation": { "type": "boolean" }
+        }
+      }
+    },
+    "created_at": { "type": "string" }
+  }
+}

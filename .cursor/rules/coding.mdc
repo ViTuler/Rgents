@@ -1,0 +1,68 @@
+---
+description: Coding rules — read before writing, minimal diffs, no fabricated results, no scope creep, and no weakening of tests or checks.
+alwaysApply: false
+globs:
+  - "src/**"
+  - "**/*.ts"
+  - "**/*.tsx"
+  - "**/*.js"
+  - "**/*.jsx"
+  - "**/*.py"
+  - "**/*.go"
+  - "**/*.rs"
+  - "**/*.java"
+  - "**/*.cs"
+  - "**/*.rb"
+  - "**/*.php"
+  - "**/*.sql"
+---
+
+# Coding rules
+
+## Before you write
+
+- **Read the file you are about to change, and its neighbours.** Do not edit code you have not read.
+- Find how this codebase already solves the problem you are about to solve. Follow that pattern.
+- Understand the existing error handling, logging, and configuration conventions before adding your own.
+- If the task is ambiguous, read the design and plan artifacts. If they do not resolve it, escalate.
+
+## While you write
+
+- **Minimal diffs.** Change what the task requires and nothing else. Do not reformat unrelated lines,
+  reorder imports in untouched files, rename things opportunistically, or "clean up while I am here".
+- Match the surrounding code: naming, structure, comment density, and idiom. Consistency beats your preference.
+- **No dead code**, no commented-out code, no scaffolding, no debug prints left behind.
+- No speculative abstraction. Three similar lines beat a premature helper; extract on the third real use.
+- Handle errors at the boundary where you can do something meaningful about them. Do not swallow
+  exceptions silently, and do not catch an error you cannot handle.
+- Never log secrets, credentials, tokens, or personal data.
+- Validate untrusted input at the trust boundary — see `.cursor/rules/security.mdc`.
+
+## Never do these
+
+- Do not disable, skip, or weaken a test, assertion, linter rule, or type check to reach a green run.
+- Do not add `# type: ignore`, `@ts-ignore`, bare `except`, or equivalent suppressions to silence a
+  real problem. If a suppression is genuinely correct, it needs an inline comment explaining why.
+- Do not commit secrets, credentials, keys, tokens, or `.env` files.
+- Do not commit generated artifacts, build output, or vendored dependencies unless the project already does.
+- Do not modify unrelated files, and do not touch files outside your assigned scope.
+- Do not report a command as passing that you did not run.
+
+## Verification before reporting
+
+Run, in this order, and fix what you find:
+
+1. Formatting / lint
+2. Type checking
+3. Unit tests for the changed area
+4. The wider suite, when the change could affect it
+
+If a failure is confined to your changed files and the cause is obvious, attempt up to **2 self-fixes**.
+Beyond that, report `status: blocked` with the actual output. Do not iterate indefinitely against a
+failing suite, and do not guess at fixes.
+
+## Reporting
+
+Report exactly: files changed, tests added and run (with real commands and real results), acceptance
+criteria addressed, deviations from the plan, and every unresolved concern. An unflattering true report
+is worth more than a clean one that hides a problem.

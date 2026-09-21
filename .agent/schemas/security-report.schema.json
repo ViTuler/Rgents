@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "security-report.schema.json",
+  "title": "security-report.json",
+  "description": "Security assessment. Sole writer: security. critical and high findings are blocking and cannot be waived by the developer or the tech lead.",
+  "type": "object",
+  "required": ["task_id", "verdict", "findings"],
+  "additionalProperties": true,
+  "properties": {
+    "task_id": { "type": "string", "pattern": "^TASK-[0-9]{3,}$" },
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "SKIP"],
+      "description": "FAIL if any unresolved critical or high finding exists."
+    },
+    "summary": { "type": "string" },
+    "skip_reason": { "type": "string" },
+    "threat_model": {
+      "type": "object",
+      "description": "What an attacker controls at each boundary the change crosses. Without this, the assessment is a checklist rather than an analysis.",
+      "properties": {
+        "assets": { "type": "array", "items": { "type": "string" } },
+        "trust_boundaries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["boundary", "attacker_controls"],
+            "properties": {
+              "boundary": { "type": "string" },
+              "attacker_controls": { "type": "string" },
+              "abuse_case": { "type": "string" }
+            }
+          }
+        },
+        "not_analyzed": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "severity", "title", "description", "attack_scenario", "remediation"],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+          "title": { "type": "string" },
+          "description": { "type": "string" },
+          "attack_scenario": {
+            "type": "string",
+            "minLength": 10,
+            "description": "How this is actually abused, step by step. A vulnerability Without an attack path is a hypothesis."
+          },
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "cwe": { "type": "string", "description": "CWE identifier where applicable." },
+          "remediation": { "type": "string" },
+          "blocking": { "type": "boolean" },
+          "status": { "type": "string", "enum": ["open", "fixed", "accepted_risk", "false_positive"] }
+        }
+      }
+    },
+    "assessed_areas": {
+      "type": "object",
+      "description": "Coverage declaration. A PASS that silently skipped authentication is worse than a FAIL.",
+      "properties": {
+        "authentication": { "type": "string", "enum": ["assessed", "not_applicable", "not_assessed"] },
+        "authorization": { "type": "string", "enum": ["assessed", "not_applicable", "not_assessed"] },
+        "input_validation": { "type": "string", "enum": ["assessed", "not_applicable", "not_assessed"] },
+        "data_protection": { "type": "string", "enum": ["assessed", "not_applicable", "not_assessed"] },
+        "resource_access": { "type": "string", "enum": ["assessed", "not_applicable", "not_assessed"] },
+        "rate_limiting": { "type": "string", "enum": ["assessed", "not_applicable", "not_assessed"] },
+        "dependencies": { "type": "string", "enum": ["assessed", "not_applicable", "not_assessed"] },
+        "error_disclosure": { "type": "string", "enum": ["assessed", "not_applicable", "not_assessed"] },
+        "cryptography": { "type": "string", "enum": ["assessed", "not_applicable", "not_assessed"] },
+        "destructive_operations": { "type": "string", "enum": ["assessed", "not_applicable", "not_assessed"] }
+      }
+    },
+    "blocking_findings": { "type": "array", "items": { "type": "string" } },
+    "required_before_merge": { "type": "array", "items": { "type": "string" } },
+    "not_assessed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["item", "reason"],
+        "properties": {
+          "item": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "self_assessment": {
+      "type": "object",
+      "properties": {
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+        "uncertainty_areas": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "completed_at": { "type": "string" }
+  }
+}

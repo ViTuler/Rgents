@@ -1,0 +1,194 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "intake.schema.json",
+  "title": "intake.json",
+  "description": "Task classification and routing decision. Sole writer: orchestrator.",
+  "type": "object",
+  "required": ["task_id", "type", "complexity", "risk", "layers", "activated_specialists", "skipped_specialists", "workflow"],
+  "additionalProperties": true,
+  "properties": {
+    "task_id": { "type": "string", "pattern": "^TASK-[0-9]{3,}$" },
+    "title": { "type": "string", "minLength": 1 },
+    "request": { "type": "string", "description": "The original human request, verbatim." },
+    "type": { "type": "string", "enum": ["feature", "bugfix", "refactor", "incident"] },
+    "complexity": { "type": "string", "enum": ["trivial", "standard", "complex"] },
+    "risk": { "type": "string", "enum": ["low", "medium", "high"] },
+    "classification_rationale": {
+      "type": "string",
+      "description": "Why this complexity and risk, citing the definitions in .agent/config.yaml. Required so a trivial classification is auditable."
+    },
+    "layers": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["frontend", "backend", "database", "infrastructure", "data", "docs"] },
+      "minItems": 1
+    },
+    "workflow": { "type": "string", "enum": ["feature", "bugfix", "refactor", "incident"] },
+    "activated_specialists": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["ux", "security", "devops", "database", "data", "performance"] }
+    },
+    "skipped_specialists": {
+      "type": "array",
+      "description": "Every skipped conditional specialist with its reason. A silently skipped specialist is a protocol violation.",
+      "items": {
+        "type": "object",
+        "required": ["specialist", "reason"],
+        "properties": {
+          "specialist": { "type": "string", "enum": ["ux", "security", "devops", "database", "data", "performance"] },
+          "reason": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "activated_triggers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The trigger names from .agent/config.yaml that fired."
+    },
+    "blocking_gates": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Gates that must PASS before completion, derived from risk."
+    },
+    "human_signoff_required": { "type": "boolean" },
+    "parallel_groups": {
+      "type": "array",
+      "description": "Workstreams the plan declares parallel-safe. Validated against .agent/config.yaml parallelization rules.",
+      "items": {
+        "type": "object",
+        "required": ["group", "agents", "file_sets"],
+        "properties": {
+          "group": { "type": "string" },
+          "agents": { "type": "array", "items": { "type": "string" } },
+          "file_sets": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "description": "Ambiguities that block progress and must be answered by the human.",
+      "items": { "type": "string" }
+    },
+    "overlap_check": {
+      "type": "object",
+      "description": "Duplicate-request check against every active task, performed at intake before a task ID is allocated. Required: without it, two active tasks describing one request can both look authoritative. A `likely` match must be adjudicated by the human.",
+      "required": ["checked_against", "method", "highest_score", "matches", "decision"],
+      "additionalProperties": false,
+      "properties": {
+        "checked_against": {
+          "type": "array",
+          "description": "Every active task this request was compared against. An empty array is valid only when no other active task existed.",
+          "items": { "type": "string", "pattern": "^TASK-[0-9]{3,}$" }
+        },
+        "method": {
+          "type": "string",
+          "description": "How the comparison was made. `token_overlap` is the deterministic heuristic implemented in validate.py; name anything else explicitly."
+        },
+        "highest_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Highest similarity observed. The validator recomputes this independently and errors on a material understatement."
+        },
+        "matches": {
+          "type": "array",
+          "description": "Overlaps at or above the `possible` threshold in .agent/config.yaml.",
+          "items": {
+            "type": "object",
+            "required": ["task_id", "score", "level"],
+            "additionalProperties": true,
+            "properties": {
+              "task_id": { "type": "string", "pattern": "^TASK-[0-9]{3,}$" },
+              "score": { "type": "number", "minimum": 0, "maximum": 1 },
+              "level": {
+                "type": "string",
+                "enum": ["likely", "possible"],
+                "description": "`likely` requires human adjudication; `possible` is recorded and warned."
+              },
+              "shared_terms": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "The canonical terms that produced the score, so the judgement can be inspected rather than trusted."
+              },
+              "method": {
+                "type": "string",
+                "enum": ["request_narrow", "document_broad"],
+                "description": "Which comparison produced this score. `request_narrow` compares title and request only and is the precise signal; `document_broad` also compares the acceptance criteria and catches the same feature described differently, including in another language."
+              },
+              "narrow_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Title-and-request similarity, recorded so a match can be inspected."
+              },
+              "broad_score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Whole-document similarity, recorded so a match can be inspected."
+              },
+              "location": {
+                "type": "string",
+                "enum": ["active", "completed", "archive"],
+                "description": "Where the other task lives. An overlap between two ACTIVE tasks is the collision this check exists for; completed is informational; archive is settled and needs no adjudication, but is still scanned so a recorded match stays verifiable."
+              },
+              "relationship": {
+                "type": "string",
+                "enum": ["same_request", "subset", "superset", "related_but_distinct", "unrelated"],
+                "description": "How the orchestrator reads the overlap. `related_but_distinct` still needs a reason under `decision.rationale`."
+              }
+            }
+          }
+        },
+        "decision": {
+          "type": "object",
+          "description": "The adjudication. When any match is `likely`, this must be confirmed by the human; the orchestrator may run the comparison but may not make the call.",
+          "required": ["outcome", "decided_by"],
+          "additionalProperties": false,
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "enum": ["new", "reuse", "supersede", "no_overlap"],
+              "description": "new = proceed as a separate task; reuse = do not create a task, continue the existing one; supersede = create this task and archive the named one; no_overlap = nothing met the `possible` threshold."
+            },
+            "decided_by": {
+              "type": "string",
+              "enum": ["human", "orchestrator"],
+              "description": "Must be `human` when any match is `likely`. `orchestrator` is permitted only when the highest match is `possible` or absent."
+            },
+            "superseded_task_id": {
+              "type": "string",
+              "pattern": "^TASK-[0-9]{3,}$",
+              "description": "Required when outcome is supersede. The named task must actually be archived, not left active."
+            },
+            "reused_task_id": {
+              "type": "string",
+              "pattern": "^TASK-[0-9]{3,}$",
+              "description": "Required when outcome is reuse. No new task should have been created."
+            },
+            "rationale": {
+              "type": "string",
+              "minLength": 10,
+              "description": "Required when outcome is `new` and any match exists, and when any match is `related_but_distinct`. Why the existing work does not already satisfy this request."
+            }
+          }
+        },
+        "override": {
+          "type": "object",
+          "description": "Escape hatch for a heuristic miss or false positive. A reason is mandatory.",
+          "required": ["reason"],
+          "additionalProperties": false,
+          "properties": {
+            "reason": { "type": "string", "minLength": 10 },
+            "kind": {
+              "type": "string",
+              "enum": ["false_positive", "missed_match", "other"],
+              "description": "`missed_match` records a real overlap the heuristic did not score highly enough to catch."
+            }
+          }
+        }
+      }
+    },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" }
+  }
+}

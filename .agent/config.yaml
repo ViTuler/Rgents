@@ -1,0 +1,514 @@
+# Rgents — routing policy (single source of truth)
+#
+# Agent definition files reference this file; they do not restate it.
+# The orchestrator reads this file to decide which agents a task needs.
+# Humans own this file. Agents may propose changes via a task artifact only.
+#
+# Verify consistency after editing:  python .agent/tools/validate.py
+
+version: 1
+
+team:
+  orchestrator: orchestrator
+
+  core:
+    - product
+    - tech-lead
+    - developer
+    - qa
+    - reviewer
+
+  specialists:
+    - ux
+    - security
+    - devops
+    - database
+    - data
+    - performance
+
+# ---------------------------------------------------------------------------
+# Task classification
+# ---------------------------------------------------------------------------
+# The orchestrator assigns exactly one `complexity` and one `risk` per task.
+# Complexity drives how much process is applied. Risk drives which gates block.
+
+complexity:
+  trivial:
+    description: "1-2 files, one layer, no new abstraction, no interface change."
+    examples:
+      - "fix a typo or a copy string"
+      - "change a config value"
+      - "add a getter or a log line"
+    required_agents: [developer, qa]
+    design_required: false
+    plan_required: false
+    review_required: false
+
+  standard:
+    description: "3+ files, or crosses a layer boundary, or needs tests across modules."
+    examples:
+      - "add an API endpoint with tests"
+      - "refactor a module behind an unchanged interface"
+      - "implement a specified feature"
+    required_agents: [product, tech-lead, developer, qa, reviewer]
+    design_required: true
+    plan_required: true
+    review_required: true
+
+  complex:
+    description: "New abstraction, architectural change, concurrency, or a safety-critical path."
+    examples:
+      - "add authentication or authorization"
+      - "design a new data pipeline"
+      - "introduce an event bus or a caching layer"
+      - "change a public API contract"
+    required_agents: [product, tech-lead, developer, qa, reviewer]
+    design_required: true
+    plan_required: true
+    review_required: true
+    human_signoff_required: true
+
+risk:
+  low:
+    description: "No user-visible, security, data-integrity, or availability impact."
+    blocking_gates: [qa]
+  medium:
+    description: "User-visible behavior changes, but reversible and non-sensitive."
+    blocking_gates: [qa, review]
+  high:
+    description: >
+      Touches authentication, authorization, secrets, payments, personal data,
+      destructive or irreversible data operations, or the production runtime.
+    blocking_gates: [qa, security, review]
+
+# ---------------------------------------------------------------------------
+# Specialist activation
+# ---------------------------------------------------------------------------
+# `always`      -> activated for every task where the gate is reached
+# `conditional` -> activated only when the trigger conditions match; triggers are
+#                  evaluated against the codebase and the task's declared layers.
+#
+# The orchestrator MUST record the decision (activated or skipped + reason)
+# in intake.json. Skipping a conditional specialist silently is a protocol violation.
+
+specialists:
+
+  ux:
+    activation: conditional
+    triggers:
+      - "user_facing_new_surface"        # a new page, screen, dialog, or flow
+      - "user_facing_copy_or_layout"     # changes what the user reads or sees
+      - "interaction_or_state_change"    # loading, empty, error, confirmation states
+    skips_when:
+      - "backend-only change with no user-visible effect"
+      - "internal tooling with no end-user surface"
+    stage_position: parallel_with_implementation
+    blocking: false
+
+  security:
+    activation: conditional
+    triggers:
+      - "authentication_or_authorization"
+      - "user_input_reaches_persistence_or_shell"
+      - "secrets_credentials_or_keys"
+      - "payment_or_financial_flow"
+      - "personal_or_sensitive_data"
+      - "new_external_dependency"
+      - "new_public_endpoint"
+    skips_when:
+      - "presentation-only change with no data boundary crossed"
+    stage_position: parallel_with_qa
+    blocking: true          # critical/high findings block; see severity policy
+    severity_policy:
+      critical: block
+      high: block
+      medium: fix_before_complete
+      low: record_only
+
+  devops:
+    activation: conditional
+    triggers:
+      - "build_or_ci_pipeline_changed"
+      - "deployment_surface_changed"     # Dockerfile, IaC, env vars, entrypoint
+      - "new_runtime_dependency_or_service"
+      - "config_or_secret_handling_changed"
+      - "observability_or_health_check_changed"
+    skips_when:
+      - "application code change that does not alter how it is built, configured, or run"
+    stage_position: after_review
+    blocking: true          # production-readiness blockers must be resolved
+    severity_policy:
+      critical: block
+      high: block
+      medium: fix_before_complete
+      low: record_only
+
+  database:
+    activation: conditional
+    triggers:
+      - "schema_change"
+      - "migration_added"
+      - "new_or_changed_query_on_a_growing_table"
+      - "transaction_or_isolation_semantics"
+      - "index_or_constraint_change"
+      - "data_backfill_or_repair"
+    skips_when:
+      - "no persistence layer touched"
+    stage_position: parallel_with_implementation
+    blocking: true
+    severity_policy:
+      critical: block
+      high: block
+      medium: fix_before_complete
+      low: record_only
+
+  performance:
+    activation: conditional
+    triggers:
+      - "stated_latency_or_throughput_budget"
+      - "hot_path_change"                # code on a request/render critical path
+      - "new_loop_over_unbounded_input"
+      - "n_plus_1_or_full_scan_risk"
+      - "large_payload_or_streaming"
+      - "caching_or_concurrency_introduced"
+    skips_when:
+      - "the task has no explicit performance budget and is not on a measured hot path"
+    stage_position: parallel_with_qa
+    blocking: true          # blocks only when a declared budget is exceeded
+    severity_policy:
+      critical: block
+      high: block
+      medium: fix_before_complete
+      low: record_only
+
+  data:
+    activation: conditional
+    triggers:
+      - "analytics_or_tracking_event_added_or_changed"
+      - "metric_or_dashboard_dependency"
+      - "etl_or_elt_pipeline_change"
+      - "experiment_or_feature_flag_measurement"
+      - "data_quality_or_backfill_semantics"
+    skips_when:
+      - "no event, metric, or analytical consumer is affected"
+    stage_position: parallel_with_qa
+    blocking: false
+
+# ---------------------------------------------------------------------------
+# Layer triggers
+# ---------------------------------------------------------------------------
+# A layer match does not by itself activate a specialist; it is an input to the
+# trigger evaluation above and is recorded in intake.json.
+
+layers:
+  frontend:
+    hints: ["components", "pages", "styles", "ui", "views", "screens"]
+  backend:
+    hints: ["api", "services", "handlers", "controllers", "jobs", "workers"]
+  database:
+    hints: ["migrations", "schema", "models", "repositories", "dao"]
+  infrastructure:
+    hints: ["docker", "k8s", "terraform", "ci", "workflows", "deploy"]
+  data:
+    hints: ["events", "analytics", "pipelines", "dbt", "warehouse"]
+  docs:
+    hints: ["docs", "*.md", "adr"]
+
+# ---------------------------------------------------------------------------
+# Duplicate-request detection
+# ---------------------------------------------------------------------------
+# The pipeline's invariants compare a task against its own plan. They cannot see that two
+# active tasks describe the same request, which is a real failure mode: it produces two
+# divergent requirement sets that both look authoritative.
+#
+# At intake, before allocating a task ID, the orchestrator compares the request against every
+# active task and records the result in intake.json -> overlap_check. A `likely` match must be
+# adjudicated BY THE HUMAN as new | reuse | supersede. The orchestrator may run the comparison
+# but may not make the call: choosing `new` for a request that is already in flight silently
+# forks the work, and choosing `reuse` discards the requester's intent.
+#
+# Verification:  python .agent/tools/validate.py --task <TASK-ID> --stage duplicate_check
+#
+# Scoring is a deterministic token-overlap heuristic, not semantic understanding. It is
+# deliberately transparent so it can be argued with. Because it is lexical, it will miss a
+# request restated in another language; `override` exists for exactly that case. Widen the
+# alias lists (not the thresholds) when a genuine match is being missed.
+#
+duplicate_detection:
+  enabled: true
+
+  # Two comparisons are made per pair and the higher score wins:
+  #   narrow — title and request only, the precise signal. Two near-verbatim requests score ~1.0.
+  #   broad  — title, request, goal and every acceptance criterion. Catches the same feature
+  #            described differently, including in another language where the narrow one sees nothing.
+  #
+  # Thresholds below are calibrated against the three tasks in this repository, not guessed.
+  # Measured, with the stopword and alias lists applied:
+  #   TASK-004 vs TASK-003  identical request, different task:  1.0000  (narrow)
+  #   TASK-003 vs TASK-001  same feature, different wording:    0.3714  (broad)
+  #   TASK-004 vs TASK-001  same feature, different wording:    0.2745  (broad)
+  #   any task vs TASK-002  unrelated (a copy change):          0.0000 - 0.0096
+  # So there is a wide empty band between ~0.01 and ~0.27. The thresholds sit inside it, and
+  # the min_shared_tokens guard removes the last of the noise.
+  thresholds:
+    likely: 0.24     # at or above: ERROR until a human adjudicates
+    possible: 0.12   # at or above: recorded and warned; below: ignored
+    # scores under `possible` produce no finding at all, so unrelated tasks stay silent
+
+  # Minimum shared canonical terms, as a guard against short strings scoring high by accident.
+  # The narrow comparison uses a floor of 2 instead, because a high narrow score already means
+  # the wording is near-identical.
+  min_shared_tokens: 3
+
+  # Tokens ignored when comparing. Extend per project language; do not remove the generic ones.
+  # Block list form on purpose: an inline list wrapped across lines is valid YAML but needs a
+  # full parser to read, and this file is also read by the zero-dependency validator.
+  stopwords:
+    - "the"
+    - "a"
+    - "an"
+    - "and"
+    - "or"
+    - "of"
+    - "to"
+    - "in"
+    - "for"
+    - "on"
+    - "with"
+    - "that"
+    - "this"
+    - "should"
+    - "can"
+    - "must"
+    - "will"
+    - "be"
+    - "is"
+    - "are"
+    - "was"
+    - "were"
+    - "it"
+    - "its"
+    - "as"
+    - "by"
+    - "at"
+    - "from"
+    - "into"
+    - "their"
+    - "they"
+    - "them"
+    - "user"
+    - "users"
+    - "able"
+    - "的"
+    - "了"
+    - "和"
+    - "与"
+    - "或"
+    - "是"
+    - "在"
+    - "为"
+    - "对"
+    - "把"
+    - "被"
+    - "让"
+    - "能"
+    - "可以"
+    - "应该"
+    - "需要"
+    - "一个"
+    - "这个"
+    - "那个"
+    - "我们"
+    - "你们"
+    - "他们"
+    - "用户"
+    - "功能"
+    - "支持"
+
+  # Cross-language equivalence. A lexical score cannot see that "invite a colleague" and
+  # "邀请同事" are the same request, so equivalent terms are folded onto one canonical token.
+  # This is the list that makes the heuristic usable in a bilingual repository.
+  aliases:
+    invite: ["邀请", "invitation", "invitations", "inviting"]
+    colleague: ["同事", "teammate", "teammates", "member", "members"]
+    organization: ["组织", "organisation", "org", "team", "company", "tenant", "workspace"]
+    join: ["加入", "joining", "accept", "accepted", "membership"]
+    email: ["邮箱", "邮件", "mail", "address"]
+    expire: ["过期", "expiry", "expiration", "expires", "ttl", "lifetime"]
+    token: ["令牌", "link", "links", "invite_link"]
+    role: ["角色", "permission", "permissions", "privilege", "privileges"]
+    login: ["登录", "signin", "sign_in", "authentication", "auth"]
+    password: ["密码", "credential", "credentials"]
+    delete: ["删除", "remove", "removal", "destroy", "purge"]
+    create: ["创建", "新建", "add", "adding", "insert", "register"]
+    update: ["更新", "修改", "edit", "modify", "change"]
+    search: ["搜索", "查询", "filter", "query", "find"]
+    report: ["报表", "报告", "dashboard", "analytics", "metric", "metrics"]
+    payment: ["支付", "billing", "invoice", "subscription", "checkout"]
+    notification: ["通知", "alert", "alerts", "notify", "reminder"]
+    export: ["导出", "download", "dump"]
+    import: ["导入", "upload", "ingest"]
+    performance: ["性能", "latency", "throughput", "speed", "slow"]
+    test: ["测试", "tests", "testing", "spec", "specs"]
+    docs: ["文档", "documentation", "readme", "guide"]
+
+  # An overlap the orchestrator judges irrelevant, or a real match the heuristic missed,
+  # is recorded here WITH A REASON. An override without a reason is an error.
+  override:
+    allowed: true
+    requires_reason: true
+
+# ---------------------------------------------------------------------------
+# Gates
+# ---------------------------------------------------------------------------
+# Fixed order. `blocking` gates must PASS before the task may complete.
+# A gate that FAILs returns the task to `implementation`; the whole chain re-runs.
+
+gates:
+  order: [qa, security, performance, ux, database, data, review, devops]
+
+  qa:
+    agent: qa
+    artifact: qa-report.json
+    pass_condition: "verdict == PASS"
+    on_fail: implementation
+  security:
+    agent: security
+    artifact: security-report.json
+    pass_condition: "verdict == PASS and no unresolved critical/high findings"
+    on_fail: implementation
+  performance:
+    agent: performance
+    artifact: perf-report.json
+    pass_condition: "verdict == PASS or SKIP"
+    on_fail: implementation
+  ux:
+    agent: ux
+    artifact: ux-report.json
+    pass_condition: "verdict == PASS or SKIP"
+    on_fail: implementation
+  database:
+    agent: database
+    artifact: db-report.json
+    pass_condition: "verdict == PASS or SKIP"
+    on_fail: implementation
+  data:
+    agent: data
+    artifact: data-report.json
+    pass_condition: "verdict == PASS or SKIP"
+    on_fail: implementation
+  review:
+    agent: reviewer
+    artifact: review-report.json
+    pass_condition: "verdict == PASS"
+    on_fail: implementation
+  devops:
+    agent: devops
+    artifact: delivery-report.json
+    pass_condition: "verdict == PASS or SKIP"
+    on_fail: implementation
+
+# ---------------------------------------------------------------------------
+# Rework and escalation
+# ---------------------------------------------------------------------------
+
+rework:
+  max_retries_per_stage: 2
+  max_total_cycles: 3
+  on_exceeded: escalate_to_human
+  # A failure always routes to the agent that owns the defect, never around the gate:
+  routes:
+    implementation_defect: developer
+    requirement_defect: product
+    design_defect: tech-lead
+    test_defect: qa
+    unclear_scope: orchestrator
+
+escalation:
+  policy: >
+    Escalation is cheap and expected. An agent that is uncertain escalates to the
+    tech lead or the human rather than guessing. Escalating does not count against
+    the retry budget.
+  to_tech_lead:
+    - "the design is ambiguous or internally inconsistent"
+    - "completing the task requires changing the architecture"
+    - "a specialist finding conflicts with the approved design"
+  to_human:
+    - "requirements are ambiguous or a product decision is unresolved"
+    - "the change is irreversible"
+    - "a critical security finding cannot be fixed within scope"
+    - "the same stage has failed three times"
+    - "governance surfaces would need to change"
+    - "risk is high and the task is ready to complete"
+
+# ---------------------------------------------------------------------------
+# Parallelization
+# ---------------------------------------------------------------------------
+
+parallelization:
+  default: sequential
+  allowed_when:
+    - "the plan declares the workstreams under a shared `parallel_group`"
+    - "the workstreams write to disjoint file sets"
+    - "no workstream consumes an interface another workstream is still defining"
+    - "no workstream touches a shared schema, migration, or public contract"
+  forbidden:
+    - "two agents editing the same file"
+    - "a frontend workstream consuming an API contract that is still being designed"
+    - "parallel execution when the plan declares dependencies between the streams"
+
+# ---------------------------------------------------------------------------
+# Governance — human-owned surfaces
+# ---------------------------------------------------------------------------
+# Agents may read these. Agents must never write them. Proposals go through an artifact.
+
+governance_surfaces:
+  - "AGENTS.md"
+  - ".cursor/rules/**"
+  - ".cursor/agents/**"
+  - ".cursor/skills/**"
+  - ".cursor/commands/**"
+  - ".agent/**"
+  - "docs/agents/**"
+
+# ---------------------------------------------------------------------------
+# Model assignment
+# ---------------------------------------------------------------------------
+# Agent frontmatter uses `model: inherit` by default so this framework never goes
+# stale as models change. Cursor resolves `inherit` to the parent model.
+#
+# If you want explicit per-role models, set them in the agent frontmatter. Guidance:
+#   - reasoning-heavy, correctness-critical       -> the strongest reasoning model
+#   - mechanical, high-volume, well-specified     -> a fast/cheap model
+#   - independent review                          -> a DIFFERENT model from the implementer
+#     (review independence is a property of the reviewer being a different model,
+#      not merely a different prompt)
+#
+# Recommended starting shape (edit to match your available models):
+model_guidance:
+  orchestrator: strong-reasoning
+  product: strong-reasoning
+  tech-lead: strong-reasoning
+  developer: strong-coding
+  qa: strong-coding
+  reviewer: strong-reasoning-different-vendor-than-developer
+  security: strong-reasoning-different-vendor-than-developer
+  ux: fast-multimodal
+  devops: strong-coding
+  database: strong-reasoning
+  data: fast
+  performance: strong-coding
+
+security:
+  agents_that_may_write_application_code: [developer]
+  agents_that_may_write_tests: [developer, qa, security]
+  agents_that_may_run_commands: [developer, qa, security, devops, database, performance]
+  agents_that_may_commit: []            # humans only in this baseline
+  agents_that_may_merge: []             # humans only, always
+  forbidden_operations:
+    - "force push"
+    - "skip hooks (--no-verify)"
+    - "push to a protected branch"
+    - "merge any pull request"
+    - "delete or truncate production data"
+    - "rotate or reveal credentials"

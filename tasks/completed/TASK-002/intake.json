@@ -1,0 +1,64 @@
+{
+  "task_id": "TASK-002",
+  "title": "Correct the empty-state copy on the projects list",
+  "request": "The empty project list says 'No projects.' which is confusing. Make it tell people what to do.",
+  "type": "feature",
+  "complexity": "trivial",
+  "risk": "low",
+  "classification_rationale": "Trivial: one file, one layer (frontend presentation), no new abstraction, no interface change, no behavior change beyond displayed text. Low risk: no user-visible behavior change, nothing reversible to consider, no security or data boundary crossed.",
+  "layers": [
+    "frontend"
+  ],
+  "workflow": "feature",
+  "activated_specialists": [],
+  "skipped_specialists": [
+    {
+      "specialist": "ux",
+      "reason": "Copy-only change to an existing empty state that already has a designed layout; no new surface, flow, or state introduced."
+    },
+    {
+      "specialist": "security",
+      "reason": "No trust boundary crossed: static text rendered from a constant, no user input, no data boundary."
+    },
+    {
+      "specialist": "performance",
+      "reason": "No performance budget and not on a measured hot path."
+    },
+    {
+      "specialist": "database",
+      "reason": "No persistence layer touched."
+    },
+    {
+      "specialist": "data",
+      "reason": "No analytics event or metric changed."
+    },
+    {
+      "specialist": "devops",
+      "reason": "No change to build, configuration, deployment surface, or observability."
+    }
+  ],
+  "activated_triggers": [],
+  "blocking_gates": [
+    "qa"
+  ],
+  "human_signoff_required": false,
+  "parallel_groups": [],
+  "open_questions": [],
+  "created_at": "2026-02-20",
+  "updated_at": "2026-02-20",
+  "overlap_check": {
+    "checked_against": [
+      "TASK-001",
+      "TASK-003",
+      "TASK-004"
+    ],
+    "method": "token_overlap",
+    "highest_score": 0.0096,
+    "matches": [],
+    "decision": {
+      "outcome": "no_overlap",
+      "decided_by": "orchestrator",
+      "rationale": "No task reached the possible threshold. The highest score was 0.0096 against TASK-004, from a single incidental shared term. This request corrects empty-state copy on the projects list and shares no subject matter with any invitation task in the repository."
+    }
+  }
+}

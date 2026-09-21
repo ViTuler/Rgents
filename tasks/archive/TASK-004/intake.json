@@ -1,0 +1,114 @@
+{
+  "task_id": "TASK-004",
+  "title": "用户应能邀请同事加入组织",
+  "request": "用户应该能邀请同事加入组织",
+  "type": "feature",
+  "complexity": "standard",
+  "risk": "high",
+  "classification_rationale": "Type is feature: the request asks for a new capability (a user can invite a colleague into an organization). It is not a defect (bugfix), not a behavior-preserving restructure (refactor), and not an outage or production failure (incident). Complexity is standard, not trivial. .agent/config.yaml defines trivial as 1-2 files, one layer, no new abstraction, and no interface change; its examples are a typo, a config value, or a getter or log line. This request cannot be satisfied that way: inviting a colleague into an organization crosses a layer boundary (a user-facing action, a service that grants membership, and persisted invitation/membership state) and needs tests across those modules. It matches the standard examples 'add an API endpoint with tests' and 'implement a specified feature'. Complexity is not complex. config.yaml reserves complex for a new abstraction, an architectural change, concurrency as the subject of the work, or a safety-critical path; its examples are adding an authentication or authorization system, a data pipeline, an event bus or caching layer, or changing a public API contract. This request adds an invite capability on organization membership. It does not introduce a new platform abstraction or an authentication system. The authorization impact is recorded as risk, not as complexity. Risk is high. config.yaml defines high as touching authentication, authorization, secrets, payments, personal data, destructive or irreversible data operations, or the production runtime. Inviting a colleague grants organization membership (authorization) and takes a colleague identifier that is personal data and must be persisted. Medium (user-visible but reversible and non-sensitive) does not fit, because membership and a personal identifier are sensitive. human_signoff_required is true because the feature workflow requires human sign-off when complexity is complex or risk is high; here risk is high. There is no product source tree under src/; layers are what this capability must touch, not files that already exist.",
+  "layers": [
+    "frontend",
+    "backend",
+    "database"
+  ],
+  "workflow": "feature",
+  "activated_specialists": [
+    "ux",
+    "security",
+    "database"
+  ],
+  "skipped_specialists": [
+    {
+      "specialist": "devops",
+      "reason": "skips_when matches: application capability change that does not alter how the system is built, configured, or run. No build_or_ci_pipeline_changed, deployment_surface_changed, new_runtime_dependency_or_service, config_or_secret_handling_changed, or observability_or_health_check_changed trigger is present in the request."
+    },
+    {
+      "specialist": "performance",
+      "reason": "skips_when matches: the task has no explicit latency or throughput budget and is not on a measured hot path. No stated_latency_or_throughput_budget, hot_path_change, new_loop_over_unbounded_input, n_plus_1_or_full_scan_risk, large_payload_or_streaming, or caching_or_concurrency_introduced trigger applies. Sending an invitation is low-volume relative to a request hot path."
+    },
+    {
+      "specialist": "data",
+      "reason": "skips_when matches: no event, metric, or analytical consumer is affected. No analytics_or_tracking_event_added_or_changed, metric_or_dashboard_dependency, etl_or_elt_pipeline_change, experiment_or_feature_flag_measurement, or data_quality_or_backfill_semantics trigger applies."
+    }
+  ],
+  "activated_triggers": [
+    "user_facing_new_surface",
+    "user_facing_copy_or_layout",
+    "interaction_or_state_change",
+    "authentication_or_authorization",
+    "user_input_reaches_persistence_or_shell",
+    "personal_or_sensitive_data",
+    "new_public_endpoint",
+    "schema_change",
+    "migration_added",
+    "new_or_changed_query_on_a_growing_table"
+  ],
+  "blocking_gates": [
+    "qa",
+    "security",
+    "database",
+    "review"
+  ],
+  "human_signoff_required": true,
+  "parallel_groups": [],
+  "open_questions": [],
+  "created_at": "2026-09-20",
+  "updated_at": "2026-09-20",
+  "overlap_check": {
+    "checked_against": [
+      "TASK-001",
+      "TASK-003"
+    ],
+    "method": "token_overlap",
+    "highest_score": 1.0,
+    "matches": [
+      {
+        "task_id": "TASK-003",
+        "score": 1.0,
+        "level": "likely",
+        "method": "request_narrow",
+        "narrow_score": 1.0,
+        "broad_score": 0.2857,
+        "shared_terms": [
+          "invite",
+          "colleague"
+        ],
+        "location": "active",
+        "relationship": "same_request"
+      },
+      {
+        "task_id": "TASK-001",
+        "score": 0.2745,
+        "level": "likely",
+        "method": "document_broad",
+        "narrow_score": 0.0,
+        "broad_score": 0.2745,
+        "shared_terms": [
+          "admin",
+          "colleague",
+          "create",
+          "email",
+          "expire",
+          "invite",
+          "join",
+          "member",
+          "organization",
+          "owner",
+          "token"
+        ],
+        "location": "active",
+        "relationship": "same_request"
+      }
+    ],
+    "decision": {
+      "outcome": "supersede",
+      "decided_by": "human",
+      "superseded_task_id": "TASK-003",
+      "rationale": "TASK-003 and TASK-004 were created from the same request. The narrow comparison scores them 1.0, which is a verbatim restatement. TASK-004 is kept as canonical because its requirements were produced by the product role through the normal stage, whereas TASK-003's were authored directly by the human as a workaround after the product agent could not write. TASK-001 is the same feature and is deliberately left active: it is the worked example that ships with the framework, and superseding it would leave TASK-001, TASK-003 and TASK-004 all archived for one request."
+    },
+    "override": {
+      "reason": "TASK-001 is retained on purpose. It is the framework's worked example, not competitive work: it exists to show the artifact shapes, and it is intentionally left blocked at the security gate. Treating it as a live duplicate would archive the only complete end-to-end example in the repository.",
+      "kind": "false_positive"
+    }
+  }
+}

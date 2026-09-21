@@ -1,0 +1,171 @@
+# Feature workflow — new capability or user-visible change.
+# Read by the orchestrator. Stage order is authoritative; gates are not optional when reached.
+#
+# `condition` values are evaluated against intake.json (complexity, risk, layers, triggers)
+# and against .agent/config.yaml. A condition that cannot be evaluated is treated as TRUE,
+# so the failure mode is an extra gate rather than a skipped one.
+
+name: feature
+description: Deliver a new capability from an ambiguous request to verified, reviewed, delivery-ready code.
+
+entry:
+  command: /spec
+  agent: orchestrator
+
+stages:
+
+  - id: intake
+    agent: orchestrator
+    artifact: intake.json
+    description: >
+      Classify type, complexity, risk and layers; activate specialists; record a reason for every
+      skip; and compare the request against every active task, recording the result in
+      overlap_check. A likely overlap must be adjudicated by the human as reuse, supersede or new
+      before any further stage runs.
+    required: true
+    gates: [duplicate_check]
+
+  - id: specification
+    agent: product
+    artifact: requirements.json
+    reads: [intake.json]
+    description: Goal, actors, user stories, acceptance criteria, edge cases, out-of-scope.
+    required: true
+    condition: complexity != trivial
+    on_missing_decision: ask_human
+
+  - id: design
+    agent: tech-lead
+    artifacts: [design.json]
+    reads: [requirements.json]
+    description: Architecture, interfaces, data model, dependencies, ADRs, risks.
+    required: true
+    condition: complexity != trivial
+
+  - id: planning
+    agent: tech-lead
+    artifact: plan.json
+    reads: [requirements.json, design.json]
+    description: Ordered steps with depends_on, acceptance mapping, parallel groups, specialists_required.
+    required: true
+    condition: complexity != trivial
+
+  - id: ux_design
+    agent: ux
+    artifact: ux-report.json
+    reads: [requirements.json, design.json]
+    description: Flows, state coverage (loading/empty/error/permission), accessibility, copy, responsive behavior.
+    condition: specialists includes ux
+    stage_position: parallel_with_implementation
+
+  - id: environment
+    agent: orchestrator
+    reads: [intake.json]
+    description: >
+      Confirm the development environment with the human BEFORE any implementation or verification
+      command runs: which runtime and version, which environment manager and active environment, the
+      authoritative install/lint/typecheck/test commands, required services and configuration, and
+      whether the suite passes on the current revision. The confirmation is recorded in
+      worker-result.json -> environment.
+    required: true
+    condition: complexity != trivial
+    rule: >
+      A command that fails because the wrong runtime is active is indistinguishable from a code defect,
+      so an unconfirmed environment turns setup problems into false findings and costs a full rework
+      cycle. Confirm first. See .cursor/rules/environment.mdc.
+    on_unanswered: stop_and_wait
+
+  - id: implementation
+    agent: developer
+    artifact: worker-result.json
+    reads: [requirements.json, design.json, plan.json]
+    description: Implement the plan's steps in order; run lint/type/tests in the confirmed environment; report changes and concerns honestly.
+    required: true
+    gates: [environment_confirmed]
+
+  - id: database_review
+    agent: database
+    artifact: db-report.json
+    reads: [design.json, plan.json, worker-result.json]
+    description: Schema, indexes, migration lock/rollback safety, query plans, integrity.
+    condition: specialists includes database
+    stage_position: parallel_with_qa
+    blocking: true
+
+  - id: qa
+    agent: qa
+    artifact: qa-report.json
+    reads: [requirements.json, design.json, plan.json, worker-result.json]
+    description: Independent per-criterion verification, adversarial edge cases, regression, integration.
+    required: true
+    blocking: true
+    on_fail: implementation
+
+  - id: security
+    agent: security
+    artifact: security-report.json
+    reads: [design.json, plan.json, worker-result.json]
+    description: Threat model; authn/authz, input validation, data protection, resource access, dependencies.
+    condition: specialists includes security
+    stage_position: parallel_with_qa
+    blocking: true
+    on_fail: implementation
+
+  - id: performance
+    agent: performance
+    artifact: perf-report.json
+    reads: [design.json, plan.json, worker-result.json]
+    description: Measure against a declared budget; latency, throughput, memory, DB load, concurrency.
+    condition: specialists includes performance
+    stage_position: parallel_with_qa
+    blocking: true
+    on_fail: implementation
+
+  - id: data_review
+    agent: data
+    artifact: data-report.json
+    reads: [design.json, plan.json, worker-result.json]
+    description: Event and metric contracts, consumer impact, pipeline idempotency, data quality.
+    condition: specialists includes data
+    stage_position: parallel_with_qa
+    blocking: false
+
+  - id: review
+    agent: reviewer
+    artifact: review-report.json
+    reads: [requirements.json, design.json, plan.json, worker-result.json, qa-report.json]
+    description: Requirements traceability, correctness, maintainability, architecture drift, complexity, scope.
+    required: true
+    condition: complexity != trivial
+    blocking: true
+    on_fail: implementation
+    waits_for: [qa, security, performance, database_review]
+
+  - id: delivery
+    agent: devops
+    artifact: delivery-report.json
+    reads: [plan.json, worker-result.json, design.json]
+    description: Build reproducibility, config, secrets, migration safety, rollback, observability.
+    condition: specialists includes devops
+    blocking: true
+    on_fail: implementation
+
+  - id: completion
+    agent: orchestrator
+    artifact: task.yaml
+    description: Verify all required gates PASSed; obtain human sign-off when required; record lessons; archive.
+    required: true
+    on_fail: implementation
+    human_signoff:
+      condition: complexity == complex or risk == high
+
+gates_in_order: [qa, security, performance, database_review, data_review, review, delivery]
+
+rework:
+  route_to:
+    implementation_defect: developer
+    requirement_defect: product
+    design_defect: tech-lead
+    test_defect: qa
+    unclear_scope: orchestrator
+  re_enter_at: qa      # a fix invalidates prior verification; the gate chain re-runs

@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "requirements.schema.json",
+  "title": "requirements.json",
+  "description": "Testable requirements. Sole writer: product. Every acceptance criterion must be verifiable by an agent that never spoke to the human.",
+  "type": "object",
+  "required": ["task_id", "goal", "actors", "user_stories", "acceptance_criteria", "out_of_scope"],
+  "additionalProperties": true,
+  "properties": {
+    "task_id": { "type": "string", "pattern": "^TASK-[0-9]{3,}$" },
+    "goal": {
+      "type": "string",
+      "minLength": 10,
+      "description": "One sentence a non-author would understand. What outcome, for whom."
+    },
+    "actors": {
+      "type": "array",
+      "minItems": 1,
+      "description": "\"The user\" is almost never specific enough. Name the roles and their permissions.",
+      "items": {
+        "type": "object",
+        "required": ["name", "description"],
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "permissions": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "user_stories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "story"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^US-[0-9]+$" },
+          "story": { "type": "string", "description": "As a <actor>, I want <capability>, so that <outcome>." },
+          "priority": { "type": "string", "enum": ["must", "should", "could", "wont"] }
+        }
+      }
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Atomic, observable, independently verifiable. IDs are referenced by plan.json and qa-report.json.",
+      "items": {
+        "type": "object",
+        "required": ["id", "text"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^AC-[0-9]+$" },
+          "text": { "type": "string", "minLength": 10, "description": "The observable condition that must hold." },
+          "verification_method": { "type": "string", "description": "How another agent can check this without asking the author." },
+          "priority": { "type": "string", "enum": ["mvp", "later"] }
+        }
+      }
+    },
+    "business_rules": {
+      "type": "array",
+      "description": "Invariants that must hold across all paths.",
+      "items": {
+        "type": "object",
+        "required": ["id", "rule"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^BR-[0-9]+$" },
+          "rule": { "type": "string" },
+          "rationale": { "type": "string" }
+        }
+      }
+    },
+    "edge_cases": {
+      "type": "array",
+      "description": "Enumerate explicitly: empty, duplicate, expired, unauthorized, concurrent, already-done, partial failure, missing dependency, boundary values.",
+      "items": {
+        "type": "object",
+        "required": ["case", "expected"],
+        "properties": {
+          "case": { "type": "string" },
+          "expected": { "type": "string" },
+          "category": {
+            "type": "string",
+            "enum": ["empty", "duplicate", "expired", "unauthorized", "concurrent", "already_done", "partial_failure", "missing_dependency", "boundary", "other"]
+          }
+        }
+      }
+    },
+    "out_of_scope": {
+      "type": "array",
+      "minItems": 1,
+      "description": "A boundary that is not written down will be crossed. At least one entry is required.",
+      "items": { "type": "string" }
+    },
+    "assumptions": {
+      "type": "array",
+      "description": "Every assumption, with the impact if it turns out to be wrong.",
+      "items": {
+        "type": "object",
+        "required": ["assumption"],
+        "properties": {
+          "assumption": { "type": "string" },
+          "impact_if_wrong": { "type": "string" }
+        }
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "description": "Unresolved product decisions. Non-empty means the workflow must stop and ask the human.",
+      "items": {
+        "type": "object",
+        "required": ["question"],
+        "properties": {
+          "question": { "type": "string" },
+          "blocks": { "type": "string", "description": "What cannot proceed until this is answered." }
+        }
+      }
+    },
+    "ux_dimension": {
+      "type": "boolean",
+      "description": "True when this requirement has a user-facing experience component and UX should be activated."
+    },
+    "created_at": { "type": "string" }
+  }
+}

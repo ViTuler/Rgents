@@ -1,0 +1,356 @@
+# TASK-004 — lifecycle state and resume anchor
+#
+# Written by the orchestrator. Resume from this file alone.
+
+task_id: "TASK-004"
+title: "用户应能邀请同事加入组织"
+workflow: "feature"
+status: "abandoned"
+current_stage: "abandoned"
+
+abandoned:
+  decided_by: "human"
+  decided_at: "2026-09-20"
+  reason: >
+    The test was abandoned rather than completed. During testing the environment gate, the plan
+    stage and the artifacts were changed several times, so this record no longer describes a single
+    coherent run and cannot be used to judge whether the gates behaved correctly. A test case whose
+    own setup was in flux measures the flux, not the framework.
+  kept_for: >
+    The structural finding is still valid and is worth keeping: a plan written for an assumed
+    codebase (step 6 modifies src/organizations/routes.ts, which does not exist here) is caught
+    mechanically by check_plan_against_repository, and the decision that implementing anyway would
+    be a silent redesign. The environment findings ENV-3 (conda reports the environment `vi` twice)
+    and the STRUCT-1 analysis also remain accurate.
+  superseded_by: "TASK-001 in the Rgents-Sandbox project, which ran the same feature end to end on a clean baseline."
+  do_not: >
+    Do not resume this task, and do not treat its stage table as evidence of framework behaviour.
+    In particular, task.yaml records `planning: result: PASS` while the validator reports the plan
+    stage as FAIL with two step_target_missing errors; the validator is right.
+current_stage: "environment"
+
+classification:
+  complexity: "standard"
+  risk: "high"
+  rationale: >
+    Feature, standard, high. Not trivial: inviting a colleague crosses frontend, backend, and
+    database and cannot be a 1-2 file, one-layer, no-interface change. Not complex: it does not
+    introduce a new architectural abstraction or an authentication system; it implements a specified
+    membership-invite capability. High risk: granting organization membership is authorization, and
+    the colleague identifier is personal data that must be persisted. Human sign-off is required
+    before completion because risk is high.
+
+acceptance_criteria:
+  - "AC-1"
+  - "AC-2"
+  - "AC-3"
+  - "AC-4"
+  - "AC-5"
+  - "AC-6"
+  - "AC-7"
+  - "AC-8"
+  - "AC-9"
+  - "AC-10"
+  - "AC-11"
+  - "AC-12"
+  - "AC-13"
+  - "AC-14"
+
+# ---------------------------------------------------------------------------
+# Environment gate — the first real use of this gate, and it found a real problem.
+#
+# The gate did exactly what it was built for: it blocked dispatch rather than letting the
+# developer run commands in an unconfirmed environment, and the investigation that followed
+# surfaced both a machine-level finding and a hard structural blocker.
+# ---------------------------------------------------------------------------
+
+environment:
+  status: "BLOCKED"
+  confirmed_by_user: false
+  detected:
+    conda_environments:
+      - "base (Python 3.13.9) — currently active; `CONDA_DEFAULT_ENV` is empty"
+      - "package"
+      - "tool"
+      - "torch"
+      - "vi (Python 3.12.13)"
+    node: "v24.15.0"
+    npm: "11.12.1"
+    nvm: "not installed"
+    product_stack: "none found — no package.json, lockfile, src/, pages/, db/, or tests/"
+  findings:
+    - id: "ENV-3"
+      severity: "medium"
+      description: >
+        `conda env list` reports the environment named `vi` TWICE, both entries pointing at the same
+        environment directory.
+      impact: >
+        A duplicated name makes "use the vi environment" ambiguous as an instruction: two entries
+        can disagree about which interpreter or package set a command resolves to. This is exactly
+        the class of problem the environment gate exists to catch, because the resulting failure
+        would look like a code defect.
+      resolution: >
+        `conda run -n vi python` was used successfully and reported Python 3.12.13, so the exact
+        invocation is recorded rather than the bare name. The duplicate registration itself is a
+        machine configuration issue for the human to clean up.
+      resolved: false
+
+# ENV-1 and ENV-2 above are the blocking items the orchestrator recorded while the gate was open.
+# STRUCT-1 below is the structural half of ENV-2, stated as its own concern because it has its own
+# owner and its own mechanical check.
+
+structural_blocker:
+  id: "STRUCT-1"
+  severity: "blocking"
+  description: >
+    The approved design and plan describe a codebase that is not this repository. Plan step 6 says
+    `modify` on `src/organizations/routes.ts`, which does not exist. The design assumes an existing
+    organization service, an organization-role guard, a membership service, a mail transport port,
+    a shared error shape, and a transaction helper — none of which are here.
+  owner: "tech-lead"
+  why_it_blocks: >
+    Implementing this plan here would require first inventing the entire surrounding service. That is
+    a silent redesign and a scope expansion far past the nine planned files, and it is precisely what
+    the developer agent refused to do when it paused.
+  mechanical_detection: >
+    No longer a matter of an agent reasoning it out by hand. `check_plan_against_repository` reports
+    `step_target_missing` whenever a `modify` or `delete` step targets a file that is absent, so the
+    mismatch is now stated as a fact before any work starts:
+      python .agent/tools/validate.py --task TASK-004 --stage plan   -> FAIL, 1 error
+  resolution_options:
+    - "Run the task in the repository the design actually assumes, re-running /spec there so the intake, design and plan describe real files. This is the intended path: the framework is built to be copied into a product repository."
+    - "Re-run /design against a repository that does have the assumed service, so the plan is written for code that exists."
+    - "Deliberately greenfield: accept that the surrounding service must also be built, and re-scope the task to say so explicitly rather than smuggling it in."
+  not_an_option: >
+    Implementing anyway. That produces an implementation of an imagined service, which every
+    downstream gate would then verify against a design describing a different codebase.
+
+stages:
+  intake:
+    agent: "orchestrator"
+    result: "PASS"
+    summary: "feature/standard/high; ux, security, database activated; devops, performance, data skipped with reasons"
+    artifact_path: "tasks/active/TASK-004/intake.json"
+  specification:
+    agent: "human (product unavailable)"
+    result: "PASS"
+    summary: "14 acceptance criteria, 10 business rules, 14 edge cases, 10 out-of-scope items, 4 assumptions; open_questions cleared from 8 to 0. Authored by the human because the orchestrator subagent type was unavailable, so no agent could reach this stage."
+    artifact_path: "tasks/active/TASK-004/requirements.json"
+    authorship_caveat: "human-authored; did not pass through the product role. Every decision traces to the product_decisions block in this file."
+  design:
+    agent: "human (tech-lead unavailable)"
+    result: "PASS"
+    summary: "3 endpoints, 1 new entity, 5 ADRs with rejected alternatives, 5 risks; reuses the existing role guard, membership service, mail port and error shape. No new abstraction introduced."
+    artifact_path: "tasks/active/TASK-004/design.json"
+    authorship_caveat: "human-authored; did not pass through the tech-lead role."
+  planning:
+    agent: "human (tech-lead unavailable)"
+    result: "PASS"
+    summary: "9 steps over 9 files; all 14 acceptance criteria mapped; 4 parallel groups declared; no irreversible steps. plan stage invariants pass (two-way file/step consistency, AC mapping complete)."
+    artifact_path: "tasks/active/TASK-004/plan.json"
+    authorship_caveat: "human-authored; did not pass through the tech-lead role."
+  ux:
+    agent: "ux"
+    result: "NOT RUN"
+    summary: "activated; parallel_with_implementation; held until environment is confirmed"
+  environment:
+    agent: "orchestrator"
+    result: "PAUSED"
+    summary: "Human requested a temporary stop. Environment still unconfirmed; no product source tree. Developer not dispatched."
+  implementation:
+    agent: "developer"
+    result: "NOT RUN"
+    summary: "blocked on environment confirmation; developer not dispatched"
+  database:
+    agent: "database"
+    result: "NOT RUN"
+    summary: "activated; blocking; runs with the verification gates"
+  qa:
+    agent: "qa"
+    result: "NOT RUN"
+    summary: "not reached"
+  security:
+    agent: "security"
+    result: "NOT RUN"
+    summary: "activated; blocking"
+  review:
+    agent: "reviewer"
+    result: "NOT RUN"
+    summary: "required for standard complexity; waits for qa, security, and database"
+  delivery:
+    agent: "devops"
+    result: "SKIP"
+    summary: "specialist not activated: no build, config, deployment, or observability change"
+
+retries: {}
+
+routing_decisions:
+  - stage: "specification"
+    decision: "do not proceed to design; return control to the human"
+    reason: "requirements.json open_questions had 8 unresolved product decisions. Feature workflow on_missing_decision is ask_human. Orchestrator must not guess."
+    verdict: "correct — product refused to choose defaults, wrote six skeleton acceptance criteria that hold regardless of the answers, and precisely enumerated what each open decision blocked"
+  - stage: "specification"
+    decision: "human-authored requirements, decisions folded in, open_questions cleared"
+    reason: "The orchestrator subagent type became unavailable in the session, so no agent could be dispatched to fold the human's eight answers back into requirements.json. A human is the principal the framework serves, not a role inside it, so direct authorship by the human is a legitimate input path rather than a bypass of separation of duties: implementation, verification and approval remain three different agents."
+  - stage: "design"
+    decision: "human-authored design and plan"
+    reason: "Same cause: tech-lead could not be dispatched. The design invents no product behaviour; every constraint traces to a business rule or an acceptance criterion, and the plan passes the plan-stage invariants."
+  - stage: "planning"
+    decision: "plan stage re-validated before /build"
+    reason: "python .agent/tools/validate.py --task TASK-004 --stage plan, via conda env vi (Python 3.12.13). RESULT: PASS."
+    verdict: "PASS"
+  - stage: "environment"
+    decision: "stop_and_wait; do not dispatch developer"
+    reason: >
+      Feature workflow environment.on_unanswered is stop_and_wait. Implementation has
+      gates: [environment_confirmed]. Inspection found no product runtime to confirm:
+      no src/, pages/, db/, tests/, package.json, lockfile, or documented stack.
+      Plan step 6 is action: modify on src/organizations/routes.ts, which does not exist.
+      Design.architecture.fits_existing claims an organization-role guard, membership
+      service, mail port, error shape, and transaction helper already exist; none of
+      those files are in this repository. Dispatching the developer would require
+      inventing that surface, which is a silent redesign and a scope expansion beyond
+      the nine planned files. Escalation is to the human, not a guess.
+    verdict: "blocked"
+  - stage: "environment"
+    decision: "human paused /build: temporary stop"
+    reason: "Human adjudicated the product-tree question as a temporary stop. No developer, UX, or database dispatch. Resume from the environment stage when the human returns with a proceed decision and environment confirmation."
+    decided_by: "human"
+    verdict: "paused"
+
+blocking_items:
+  - id: "ENV-1"
+    stage: "environment"
+    item: "Development environment is not confirmed. No build, lint, typecheck, or test command may run until the human answers the environment questions."
+    owner: "human"
+  - id: "ENV-2"
+    stage: "environment"
+    item: >
+      This repository has no product source tree. The plan and design assume an existing
+      organization service (modify src/organizations/routes.ts; reuse role guard,
+      membership service, mail port). Implementing as written is unworkable here.
+      Human must decide whether /build is in the wrong repository, or whether this is
+      a design_defect that must return to tech-lead before implementation.
+    owner: "human"
+
+# ---------------------------------------------------------------------------
+# Product decisions — the human's answers to the 8 open questions.
+# Status: ANSWERED and FOLDED IN. requirements.json now carries them as
+# AC-1..AC-14, BR-1..BR-10 and 14 edge cases, with open_questions set to [].
+# These answers are the source of truth; the requirements file is their rendering.
+# ---------------------------------------------------------------------------
+
+product_decisions:
+  answered_by: "human"
+  answered_at: "2026-09-20"
+
+  Q1_who_may_invite:
+    decision: "Owner and admin only. A regular member cannot invite."
+    rationale: "Membership grants access to organization data, so the right to create membership must match the right to manage membership."
+    affects: ["BR-3", "AC-6", "unauthorized edge case"]
+
+  Q2_colleague_identifier:
+    decision: "Email address, supplied by the inviting user."
+    rationale: "It is the only identifier that reaches someone who may not have an account yet, and it is what a delivery channel needs."
+    affects: ["AC-1", "AC-3", "personal data retained"]
+    note: "Stored as an invitation attribute and personal data. Subject to the retention question below."
+
+  Q3_expiry:
+    decision: "Yes. Valid for 7 days from creation. After expiry the invitation can no longer be accepted and is refused identically to an unknown invitation."
+    rationale: "Bounds how long a leaked invitation stays useful, without making a normal working week too short."
+    affects: ["BR-2", "expired edge case"]
+    note: "7 days is a chosen default, not a measured optimum. It is cheap to change while the invitation lifetime is a single constant."
+
+  Q4_role_on_join:
+    decision: "Regular member. No elevated role is granted by an invitation."
+    rationale: "Least privilege. Granting admin through an invitation would let a mistaken or malicious invite escalate access silently."
+    affects: ["AC-2", "membership outcome"]
+    note: "This task does not include changing a member's role afterwards; that is out of scope."
+
+  Q5_delivery_and_acceptance:
+    decision: "Delivered by email containing a link. The colleague must accept explicitly; a successful invitation does NOT add them directly."
+    rationale: "Joining must require a deliberate action by the person being added. Consent matters, and it prevents anyone from adding a colleague without their knowledge."
+    affects: ["delivery path", "accept rule"]
+    constraint_derived: >
+      Fetching the link must NOT consume the invitation. Mail clients, link scanners and chat
+      previews fetch URLs automatically, so a GET that accepts would let a preview consume the
+      invitation before the colleague ever opens it. Reading the invitation is a safe GET; accepting
+      is a separate deliberate action.
+
+  Q6_account_required:
+    decision: "The colleague does not need an existing account. Someone not yet registered may be invited."
+    rationale: "Requiring a pre-existing account would rule out the primary case: bringing a new colleague in."
+    affects: ["who can be invited"]
+    note: "The invitation is bound to the email address. If the colleague already has an account, acceptance links the membership to that account. If they do not, acceptance is preceded by account creation."
+    constraint_derived: >
+      Binding to the email address means the invitation is not transferable. A signed-in user whose
+      address differs from the invited address must not be able to consume it as themselves.
+
+  Q7_duplicate_and_already_member:
+    decision: >
+      Already a member: refuse, and do not create a second membership.
+      Already-outstanding invitation for the same organization and address: replace the outstanding
+      invitation with the new one, so exactly one invitation is ever outstanding.
+    rationale: "Refusing duplicates bounds what a leaked invitation can do, and keeps acceptance unambiguous. Replacing rather than rejecting means an admin can recover from a lost email without a special resend feature, which is out of scope."
+    affects: ["duplicate edge case", "already-member edge case", "BR-4"]
+
+  Q8_target_organization:
+    decision: "The inviting user acts within one organization context, and that context is confirmed in the invitation request. Authorization is always evaluated server-side against that specific organization."
+    rationale: "The authority to invite is per organization, so the target must be explicit rather than inferred from the caller."
+    affects: ["AC-1", "AC-5", "target organization selection"]
+    constraint_derived: >
+      A caller who holds a role in more than one organization must not be able to create an invitation
+      for an organization in which they hold no role. The path or payload organization identifier is
+      the authority checked, never the caller's default or most recent organization.
+
+  derived_technical_constraints:
+    description: >
+      These follow from the decisions above and from security requirements, not from product intent.
+      They constrain the design; they do not add scope.
+    items:
+      - "The invitation token is a credential. Store only a hash; the plaintext exists only in the email and the accept request."
+      - "Consuming an invitation must be atomic, so a single invitation cannot be accepted twice under concurrency."
+      - "Every non-acceptable invitation state (unknown, malformed, expired, already accepted) must return an indistinguishable response, so the endpoint is not an oracle for which invitations exist."
+
+# ---------------------------------------------------------------------------
+# Duplicate task record
+#
+# The same request produced TASK-003 earlier. Neither artifact records this, which is why
+# it is written here explicitly.
+# ---------------------------------------------------------------------------
+
+duplicate_of:
+  task_id: "TASK-003"
+  canonical: "TASK-004"
+  reason: >
+    Both tasks were created from the same request. TASK-003 was blocked because the product agent
+    could not write at the time (Cursor cached the pre-fix agent definitions in which product was
+    readonly). Its requirements.json was then authored directly by the human as a workaround.
+    TASK-004 was created by a later /spec run in a session where the correction had taken effect, and
+    its requirements were written by product through the normal stage.
+  resolution: >
+    TASK-004 is canonical: its requirements came from the product role rather than from a human
+    workaround, and its only defect is unresolved product decisions, which the answers above resolve.
+    TASK-003 must be archived as superseded, not left active, so two divergent requirement sets do
+    not both appear authoritative.
+  superseded_artifact: "tasks/active/TASK-003/requirements.json"
+  retained_for: "The hashed-token, atomic-consume, and uniform-error constraints in TASK-003's design assumptions are carried into derived_technical_constraints above."
+  framework_gap: >
+    Nothing in the pipeline detects that two active tasks describe the same request. The artifact
+    invariants check a task against its own plan; they do not compare tasks to each other. The
+    orchestrator noticed informally but recorded nothing. A duplicate-request check at intake is a
+    candidate addition: compare the new request against active task titles and requirements before
+    allocating a task ID.
+
+human_signoff:
+  required: true
+  reason: "risk: high"
+  obtained: false
+
+running_summary: >
+  Intake, specification, design, and planning have passed. /build opened on 2026-09-20.
+  Plan stage re-validated: `conda run -n vi python .agent/tools/validate.py --task TASK-004
+  --stage plan` -> PASS. Implementation was not started. Environment gate WAITING, then
+  paused by the human ("temporary stop"). No developer, UX, or database dispatch. Resume
+  from the environment stage: confirm runtime/commands/services/config/baseline, and decide
+  whether this task is in the wrong repository, is a design_defect, or is greenfield work.

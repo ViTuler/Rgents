@@ -1,0 +1,220 @@
+{
+    "task_id": "TASK-003",
+    "goal": "Allow an existing organization owner or admin to invite a colleague by email so the colleague can join the organization, without manual setup by an administrator.",
+    "authorship": {
+        "written_by": "human",
+        "reason": "Authored directly by the human operator rather than by the product agent. The product agent could not write in the session that classified this task, because Cursor had cached the older agent definitions in which product was readonly. This file unblocks the pipeline; no acceptance criterion was guessed from the request beyond the assumptions listed below.",
+        "review_recommended": true
+    },
+    "actors": [
+        {
+            "name": "organization owner",
+            "description": "Full control of the organization, including billing",
+            "permissions": [
+                "invite colleagues",
+                "remove members",
+                "manage billing"
+            ]
+        },
+        {
+            "name": "organization admin",
+            "description": "Manages membership but not billing",
+            "permissions": [
+                "invite colleagues",
+                "remove members"
+            ]
+        },
+        {
+            "name": "organization member",
+            "description": "A regular member with no membership-management rights",
+            "permissions": [
+                "view organization"
+            ]
+        },
+        {
+            "name": "invited colleague",
+            "description": "Holds an invitation token; may not have an account yet",
+            "permissions": [
+                "accept the invitation addressed to them"
+            ]
+        }
+    ],
+    "user_stories": [
+        {
+            "id": "US-1",
+            "story": "As an organization owner or admin, I want to invite a colleague by email, so that they can join without me setting up their access manually.",
+            "priority": "must"
+        },
+        {
+            "id": "US-2",
+            "story": "As an invited colleague, I want to accept an invitation, so that I gain access to the organization.",
+            "priority": "must"
+        },
+        {
+            "id": "US-3",
+            "story": "As an organization owner, I want invitations to expire, so that an unused invitation does not remain a valid way in indefinitely.",
+            "priority": "must"
+        }
+    ],
+    "acceptance_criteria": [
+        {
+            "id": "AC-1",
+            "text": "An organization owner or admin can send an invitation to an email address.",
+            "verification_method": "Send an invitation as an owner and again as an admin; observe success and an invitation created in each case.",
+            "priority": "mvp"
+        },
+        {
+            "id": "AC-2",
+            "text": "A regular member who is neither owner nor admin is refused when attempting to invite a colleague.",
+            "verification_method": "Attempt to send an invitation as a regular member and observe a permission error, with no invitation created.",
+            "priority": "mvp"
+        },
+        {
+            "id": "AC-3",
+            "text": "The invited colleague receives an email at the address that was invited, containing a usable invitation link.",
+            "verification_method": "Send an invitation and confirm one message was delivered to that address, whose link resolves to the invitation.",
+            "priority": "mvp"
+        },
+        {
+            "id": "AC-4",
+            "text": "An invitation stops being acceptable after its expiry period has passed.",
+            "verification_method": "Create an invitation, advance time beyond the expiry period, then attempt to accept and observe refusal.",
+            "priority": "mvp"
+        },
+        {
+            "id": "AC-5",
+            "text": "Accepting a valid invitation grants the colleague membership of the inviting organization.",
+            "verification_method": "Accept a valid invitation and confirm the colleague is a member of that organization and of no other.",
+            "priority": "mvp"
+        },
+        {
+            "id": "AC-6",
+            "text": "An invitation cannot be accepted more than once.",
+            "verification_method": "Accept an invitation, then attempt to accept the same invitation again and observe refusal.",
+            "priority": "mvp"
+        },
+        {
+            "id": "AC-7",
+            "text": "Inviting a colleague who is already a member does not produce a second membership.",
+            "verification_method": "Invite an existing member, accept, and confirm the colleague holds exactly one membership of that organization.",
+            "priority": "mvp"
+        },
+        {
+            "id": "AC-8",
+            "text": "A failed attempt to accept an invitation does not reveal whether the invitation ever existed.",
+            "verification_method": "Compare the response for an unknown invitation against an expired, already-accepted, and malformed one; they must be indistinguishable.",
+            "priority": "mvp"
+        }
+    ],
+    "business_rules": [
+        {
+            "id": "BR-1",
+            "rule": "Only an owner or admin of an organization may invite a colleague into that organization.",
+            "rationale": "Membership grants access to the organization's data."
+        },
+        {
+            "id": "BR-2",
+            "rule": "An invitation is valid for a bounded period, after which it cannot be accepted.",
+            "rationale": "Bounds how long a leaked invitation remains useful."
+        },
+        {
+            "id": "BR-3",
+            "rule": "An invitation is single-use; accepting it consumes it atomically.",
+            "rationale": "Prevents replay and duplicate membership under concurrency."
+        },
+        {
+            "id": "BR-4",
+            "rule": "At most one invitation may be outstanding for the same organization and email address.",
+            "rationale": "Prevents invitation spam and ambiguous acceptance."
+        },
+        {
+            "id": "BR-5",
+            "rule": "The invitation token is a credential and must not be stored in a recoverable form.",
+            "rationale": "A database read leak must not become a way to join organizations."
+        }
+    ],
+    "edge_cases": [
+        {
+            "case": "the invitation has expired",
+            "expected": "refused, with a response indistinguishable from an unknown invitation",
+            "category": "expired"
+        },
+        {
+            "case": "an invitation is already outstanding for the same colleague",
+            "expected": "the earlier invitation stops being acceptable, or the new request is refused",
+            "category": "duplicate"
+        },
+        {
+            "case": "the invited colleague is already a member",
+            "expected": "no second membership is created",
+            "category": "already_done"
+        },
+        {
+            "case": "the same invitation is accepted twice at once",
+            "expected": "exactly one acceptance succeeds",
+            "category": "concurrent"
+        },
+        {
+            "case": "someone other than the invited colleague attempts to accept",
+            "expected": "refused; the invitation is not transferable",
+            "category": "unauthorized"
+        },
+        {
+            "case": "the invitation is for a different organization than one the accepter already belongs to",
+            "expected": "membership is granted only in the inviting organization",
+            "category": "unauthorized"
+        },
+        {
+            "case": "the invitation is unknown, malformed, or empty",
+            "expected": "refused, with a response indistinguishable from the expired case",
+            "category": "boundary"
+        },
+        {
+            "case": "the invitation email cannot be delivered",
+            "expected": "the invitation is not left outstanding as if the colleague had been reached",
+            "category": "partial_failure"
+        },
+        {
+            "case": "the email address is unusual but valid",
+            "expected": "accepted and matched consistently with the project's existing address handling",
+            "category": "boundary"
+        },
+        {
+            "case": "a mail scanner or preview fetches the invitation link",
+            "expected": "the link is not consumed by being fetched; acceptance requires a deliberate action",
+            "category": "other"
+        }
+    ],
+    "out_of_scope": [
+        "resending or revoking an invitation",
+        "inviting several colleagues at once",
+        "assigning a role other than the organization's default for new members",
+        "invitation analytics, reporting, or audit history",
+        "organization roles beyond owner, admin, and member",
+        "joining automatically by email domain"
+    ],
+    "assumptions": [
+        {
+            "assumption": "The request 'users should be able to invite colleagues to the organization' means colleagues are invited by email address, and that an owner or admin performs the invitation.",
+            "impact_if_wrong": "If invitation is by another mechanism (link sharing, directory lookup, domain capture) the interface and the acceptance criteria for AC-1 and AC-3 must be rewritten."
+        },
+        {
+            "assumption": "An invited colleague joins as a regular member by default.",
+            "impact_if_wrong": "AC-5 must state the resulting role, and the invite action needs a role parameter."
+        },
+        {
+            "assumption": "A bounded validity period is required, and a sensible default is acceptable in place of a stated preference.",
+            "impact_if_wrong": "BR-2 and AC-4 must be rewritten with the period the product actually requires."
+        },
+        {
+            "assumption": "The project already has a working transactional email transport.",
+            "impact_if_wrong": "email delivery becomes its own task, and AC-3 depends on it."
+        },
+        {
+            "assumption": "A colleague may accept an invitation before creating an account, or is directed through account creation as part of accepting.",
+            "impact_if_wrong": "the accept flow must be preceded by a signup step, changing the UX surface."
+        }
+    ],
+    "open_questions": [],
+    "ux_dimension": true
+}

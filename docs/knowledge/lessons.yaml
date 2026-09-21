@@ -1,0 +1,32 @@
+# Lessons — durable, cross-task failure knowledge
+#
+# Read by the orchestrator at the start of a task; appended at completion.
+# This is the only cross-session memory in the framework: an agent should not rediscover
+# the same architectural lesson every task.
+#
+# CAPACITY: 50 entries. When exceeded, drop the oldest. An unbounded lessons file becomes
+# context bloat and stops being read, at which point it is worse than no file at all.
+#
+# Schema per entry:
+#   date:        YYYY-MM-DD
+#   task:        the TASK-ID that produced the lesson
+#   pattern:     the class of mistake, not the instance. "Unindexed tenant-scoped query"
+#                is useful; "forgot the index on line 42" is not.
+#   frequency:   how many times this pattern has recurred. A count above 1 means the earlier
+#                mitigation did not work, which is itself the signal.
+#   root_cause:  why it happened, in one line
+#   mitigation:  the concrete change that prevents recurrence — a rule, a check, a test, or a lint
+#   verification: how the mitigation was confirmed to work
+
+lessons: []
+
+# Example entry (delete when adding real ones):
+#
+# lessons:
+#   - date: 2026-02-14
+#     task: TASK-004
+#     pattern: "Migration added a NOT NULL column without a default while the previous app version was still running"
+#     frequency: 1
+#     root_cause: "Migration reviewed for SQL correctness but not for deploy concurrency"
+#     mitigation: "Added an expand/contract check to the database gate: any NOT NULL column addition requires a two-step migration"
+#     verification: "Ran the two-step migration against a seeded 10M-row table; measured lock duration under 200ms"

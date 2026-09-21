@@ -1,0 +1,73 @@
+---
+description: Delivery rules — reproducible builds, safe migrations, explicit rollback, observable failures, and humans own the irreversible.
+alwaysApply: false
+globs:
+  - "Dockerfile*"
+  - "docker-compose*"
+  - ".github/workflows/**"
+  - "**/*.tf"
+  - "**/k8s/**"
+  - "**/helm/**"
+  - "**/migrations/**"
+  - "**/alembic/**"
+  - "**/config/**"
+  - "**/*.env.example"
+---
+
+# Delivery rules
+
+## It must run where it will be deployed
+
+- **"Works locally" is not evidence.** Confirm the build succeeds from a clean checkout in the same way
+  CI performs it.
+- Lockfiles are updated in the same change that alters dependencies. A lockfile that does not match the
+  manifest is a broken build waiting to happen.
+- No build step may depend on something present only on a developer's machine.
+
+## Configuration
+
+- Every new configuration value is: documented, present in each environment's config, validated at
+  startup, and either given a safe default or made to fail loudly when absent.
+- **Fail loudly, not silently.** A missing required setting must stop startup. Silent degradation from a
+  missing config is one of the most expensive production failure modes to diagnose.
+- Configuration is not code: no environment-specific logic branches in the application.
+- Update `.env.example` (or the project's equivalent) in the same change.
+
+## Secrets
+
+- **Never commit a secret.** Not in a config file, not in a sample, not in a test fixture, not in a
+  Dockerfile, not in CI logs.
+- Secrets are injected at deploy time, scoped to the minimum capability, and rotatable.
+- Never print a secret, even masked-partially, in logs or error output.
+
+## Migrations
+
+- **Assume the table is large and the deploy is concurrent.** Analyze lock behavior and duration before
+  applying anything.
+- Prefer expand/contract: add the new shape, deploy code that tolerates both, migrate data, then remove
+  the old shape in a later release.
+- Migrations must be safe while the previous application version is still running.
+- Backfills are batched, throttled, resumable, and idempotent — never one long transaction.
+- Never run a migration against production from an agent session. Propose it; a human executes it.
+
+## Rollback
+
+- Every change has a stated rollback procedure. If none exists, that is a finding to raise before merge,
+  not after.
+- Prefer changes that are forward-and-backward compatible so rollback is a redeploy rather than data repair.
+- A rollback procedure that has never been exercised is an assumption. Say so when it is untested.
+
+## Observability
+
+- New failure modes must be visible: logged with enough context to diagnose, and counted or measured
+  where an operator would need to alert on them.
+- An operator must be able to determine *what broke* from telemetry alone, without reading the source.
+- Health and readiness checks reflect real dependencies. A readiness check that passes while a required
+  dependency is unreachable is a false signal.
+- Never log secrets, credentials, tokens, or personal data.
+
+## Operations humans own
+
+Agents never perform, and never work around: deploying to production, deleting or truncating data,
+rotating credentials, tearing down infrastructure, force pushing, pushing to a protected branch, or
+merging a pull request. Propose the operation with its rollback plan; a human executes it.

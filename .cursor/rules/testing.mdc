@@ -1,0 +1,65 @@
+---
+description: Testing rules — behavior over coverage, independent verdicts, real evidence, and the discipline that untested is not the same as passing.
+alwaysApply: false
+globs:
+  - "**/*.test.*"
+  - "**/*.spec.*"
+  - "**/test_*.py"
+  - "**/*_test.py"
+  - "**/tests/**"
+  - "**/__tests__/**"
+---
+
+# Testing rules
+
+## Behavior, not coverage
+
+- A test asserts **observable behavior** against a requirement. It must not restate the implementation.
+- **A test that would still pass against a broken implementation is not a test.** Ask what defect it
+  would catch; if the answer is "none", rewrite it.
+- Test names describe the behavior and the condition, not the function name.
+- Prefer one meaningful assertion over several incidental ones.
+
+## Cover the paths that break
+
+For every acceptance criterion, cover:
+
+- **happy path** — the stated behavior occurs
+- **edge cases** — empty, duplicate, expired, unauthorized, already-done, concurrent, partial failure
+- **boundaries** — zero, one, maximum, off-by-one, empty string, null, unicode, oversized input
+- **failure behavior** — the dependency fails; is it handled as specified, or does it corrupt state or fail silently?
+
+Regression matters as much as feature coverage: when you touch a code path, verify its existing
+behavior still holds.
+
+## Evidence rules
+
+- **Run the tests.** Report the exact command and the actual result — including the failure output when
+  it fails.
+- **Never fabricate a count, a pass, or a stack trace.**
+- **Never mark a test skipped to reach a green run.** A skipped test that matters is a defect.
+- If a test could not be run, report it as not run and say why. `NOT VERIFIED` is a valid and required verdict.
+- When a test is flaky, report it as flaky rather than re-running until it passes. Retrying to green is
+  hiding an intermittent defect.
+
+## Mocking discipline
+
+- **Prefer real behavior at the boundary under test.** Mocks verify your assumptions about a dependency,
+  not the dependency's actual behavior.
+- Mock only what you cannot run (third-party services, paid APIs, nondeterministic clocks).
+- **State what your mocks leave unverified.** A green suite built on mocks of the code under test is
+  evidence of nothing.
+- Never mock the module being tested to make it pass.
+
+## Test code is code
+
+- Tests are read and maintained like production code: clear names, no duplication of setup logic,
+  a single reason to change.
+- Test data is explicit and minimal. No giant shared fixture that every test depends on and nobody understands.
+- A test that requires another test to run first is broken. Tests are independent and order-agnostic.
+
+## Independence
+
+- The agent that wrote the implementation does not write the verification verdict.
+- QA derives its test cases independently — it does not simply re-run the developer's suite and call it verification.
+- No agent edits another agent's report.

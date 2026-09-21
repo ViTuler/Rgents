@@ -1,0 +1,78 @@
+---
+description: Security rules — server-side authorization, validate untrusted input at the boundary, never expose or commit secrets, and no hand-rolled cryptography.
+alwaysApply: false
+globs:
+  - "**/auth/**"
+  - "**/*auth*"
+  - "**/*login*"
+  - "**/*token*"
+  - "**/*secret*"
+  - "**/*password*"
+  - "**/api/**"
+  - "**/routes/**"
+  - "**/controllers/**"
+  - "**/handlers/**"
+  - "**/*.env*"
+---
+
+# Security rules
+
+## Trust boundaries
+
+- **Everything from a client is untrusted input.** Query parameters, headers, cookies, request bodies,
+  file uploads, webhook payloads, and anything read from an upstream service you do not fully control.
+- Validate at the boundary where untrusted data enters, and **encode at the point of use**. Validation
+  alone does not prevent injection into a different context.
+- Never build a query, path, command, template, or deserialization target by string concatenation with
+  untrusted input. Use parameterized queries and safe APIs.
+
+## Authorization
+
+- **Authorize on the server, for the specific resource, on every request.** Client-side checks are user
+  experience, not access control.
+- Check object-level authorization: for every identifier arriving from the client, verify the caller may
+  access *that* object. Broken object-level authorization is the most common serious API flaw.
+- Default deny. A new endpoint is inaccessible until it is explicitly authorized.
+- Re-check authorization after any state change that affects permissions.
+
+## Secrets and sensitive data
+
+- **Never commit** a secret, key, token, password, or `.env` file. Never log one either.
+- Never place secrets in URLs, query strings, error messages, or client-side storage.
+- Read configuration from the environment, fail loudly when a required secret is missing, and scope each
+  secret to the minimum capability it needs.
+- Do not expose personal or sensitive data in responses beyond what the caller genuinely needs.
+- Redact sensitive fields in logs by default; opt in explicitly when a field must be logged.
+
+## Authentication
+
+- Verify credentials server-side, always.
+- Use the platform's established session/token mechanism. Do not invent a token format.
+- Set expiry and support revocation. Never implement "remember me" as an indefinitely valid token.
+- Apply rate limiting and lockout to credential endpoints to resist brute force and enumeration.
+- Return generic authentication errors — do not reveal whether an account exists.
+
+## Cryptography
+
+- **Never hand-roll cryptography**, token formats, password hashing, or random number generation.
+- Use the platform's vetted library and current recommended primitives. No MD5/SHA-1 for integrity,
+  no ECB mode, no hardcoded IVs or keys.
+- Use a cryptographically secure RNG for anything security-relevant.
+- Compare secrets and MACs in constant time.
+
+## Dependencies
+
+- A new dependency is new attack surface. Check it for known vulnerabilities, maintenance status, and
+  transitive footprint before adding it.
+- Prefer the standard library.
+
+## Error handling and disclosure
+
+- Do not leak stack traces, internal paths, query fragments, dependency versions, or framework details
+  to clients. Log the detail server-side; return a generic message.
+- Fail closed. An authorization or validation error denies access; it never falls through to the success path.
+
+## Destructive operations
+
+- Irreversible operations require explicit authorization, a confirmation step, and the minimum possible scope.
+- Never run destructive commands against production or shared data without explicit human approval.

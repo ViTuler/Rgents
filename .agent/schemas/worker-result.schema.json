@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "worker-result.schema.json",
+  "title": "worker-result.json",
+  "description": "Implementation report. Sole writer: developer. Every downstream gate trusts this artifact, so a fabricated green result here is the most damaging failure in the pipeline.",
+  "type": "object",
+  "required": ["task_id", "status", "files_changed", "tests_run", "acceptance_addressed", "unresolved_concerns", "environment"],
+  "additionalProperties": true,
+  "properties": {
+    "task_id": { "type": "string", "pattern": "^TASK-[0-9]{3,}$" },
+    "status": { "type": "string", "enum": ["completed", "blocked", "partial"] },
+    "summary": { "type": "string", "description": "What was implemented, in a short paragraph." },
+    "steps_completed": {
+      "type": "array",
+      "items": { "type": "integer" },
+      "description": "Step orders from plan.json that are done."
+    },
+    "files_changed": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "The exact list. Compared against plan.json affected_files by the scope invariant."
+    },
+    "files_created": { "type": "array", "items": { "type": "string" } },
+    "files_deleted": { "type": "array", "items": { "type": "string" } },
+    "tests_added": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "covers"],
+        "properties": {
+          "file": { "type": "string" },
+          "covers": { "type": "string", "description": "The behavior or AC ID this test protects." }
+        }
+      }
+    },
+    "tests_run": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Actually executed commands with their actual results. Never report a command as passing that was not run.",
+      "items": {
+        "type": "object",
+        "required": ["command", "result"],
+        "properties": {
+          "command": { "type": "string" },
+          "result": { "type": "string", "enum": ["pass", "fail", "not_run", "error"] },
+          "output_summary": { "type": "string", "description": "Real observed output, e.g. \"42 passed, 1 failed\"." },
+          "not_run_reason": { "type": "string", "description": "Required when result is not_run." }
+        }
+      }
+    },
+    "acceptance_addressed": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Which AC IDs the implementation addresses, and how. QA verifies these claims independently rather than trusting them.",
+      "items": {
+        "type": "object",
+        "required": ["criterion_id", "how"],
+        "properties": {
+          "criterion_id": { "type": "string", "pattern": "^AC-[0-9]+$" },
+          "how": { "type": "string" }
+        }
+      }
+    },
+    "deviations": {
+      "type": "array",
+      "description": "Every departure from the plan, with the reason. A silent deviation is a review blocker.",
+      "items": {
+        "type": "object",
+        "required": ["from", "deviation", "reason"],
+        "properties": {
+          "from": { "type": "string", "description": "The plan step or design element departed from." },
+          "deviation": { "type": "string" },
+          "reason": { "type": "string" },
+          "needs_design_update": { "type": "boolean" }
+        }
+      }
+    },
+    "unresolved_concerns": {
+      "type": "array",
+      "description": "The honest list. Do not hide a problem because the task technically completed. Empty is only correct when there genuinely are none.",
+      "items": {
+        "type": "object",
+        "required": ["concern"],
+        "properties": {
+          "concern": { "type": "string" },
+          "severity": { "type": "string", "enum": ["critical", "major", "minor", "note"] },
+          "owner": { "type": "string", "description": "Which role should address it." },
+          "blocks_completion": { "type": "boolean" }
+        }
+      }
+    },
+    "architecture_problems_found": {
+      "type": "array",
+      "description": "Architectural problems discovered while implementing. Reported, not silently fixed — routing back to the tech lead is required by AGENTS.md.",
+      "items": { "type": "string" }
+    },
+    "new_work_discovered": {
+      "type": "array",
+      "description": "Out-of-scope work found. Becomes a new task, never an expanded one.",
+      "items": { "type": "string" }
+    },
+    "blockers": {
+      "type": "array",
+      "description": "Required non-empty when status is blocked.",
+      "items": {
+        "type": "object",
+        "required": ["blocker"],
+        "properties": {
+          "blocker": { "type": "string" },
+          "needs": { "type": "string", "description": "What would unblock this, and from whom." }
+        }
+      }
+    },
+    "scope_assessment": {
+      "type": "object",
+      "properties": {
+        "files_in_scope": { "type": "boolean" },
+        "explanation": { "type": "string" }
+      }
+    },
+    "self_assessment": {
+      "type": "object",
+      "properties": {
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+        "uncertainty_areas": { "type": "array", "items": { "type": "string" } },
+        "recommendation": { "type": "string" }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "description": "The confirmed development environment. Required. A build or test failure caused by the WRONG environment is indistinguishable from a code defect, so the environment is confirmed with the human before any verification command runs, and the confirmation is recorded here.",
+      "required": ["confirmed_by_user"],
+      "additionalProperties": true,
+      "properties": {
+        "confirmed_by_user": {
+          "type": "boolean",
+          "description": "Must be true. The validator rejects an implementation report that ran verification without a human-confirmed environment, because an unconfirmed environment converts setup problems into false defect reports and triggers rework cycles that cost more than the confirmation."
+        },
+        "confirmed_at": { "type": "string", "description": "When the human confirmed." },
+        "runtime": { "type": "string", "description": "Language runtime and version actually used, e.g. 'Node 20.11' or 'Python 3.11 (conda env: vi)'." },
+        "environment_manager": { "type": "string", "description": "How the environment was selected, e.g. conda, venv, nvm, container." },
+        "package_manager": { "type": "string" },
+        "services_running": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Services required by the verification commands, and their state."
+        },
+        "config_present": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Configuration values that had to be present. Never record secret values here — names only."
+        },
+        "commands_confirmed": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "The authoritative install / lint / typecheck / test commands the human confirmed."
+        },
+        "baseline_state": {
+          "type": "string",
+          "description": "Did the suite pass before the change? Separating pre-existing failures from new ones is essential, otherwise every pre-existing failure gets attributed to this change."
+        },
+        "environment_findings": {
+          "type": "array",
+          "description": "Problems with the environment itself — a missing tool, a version mismatch, an unstarted service. These are environment findings, never implementation defects.",
+          "items": {
+            "type": "object",
+            "required": ["finding"],
+            "properties": {
+              "finding": { "type": "string" },
+              "resolved": { "type": "boolean" },
+              "effect_on_verification": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "completed_at": { "type": "string" }
+  }
+}

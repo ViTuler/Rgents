@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "review-report.schema.json",
+  "title": "review-report.json",
+  "description": "Engineering quality gate report. Sole writer: reviewer. verdict PASS requires an empty blockers array — enforced by the validator. Conditional approvals are not a valid verdict.",
+  "type": "object",
+  "required": ["task_id", "verdict", "blockers", "concerns", "nits"],
+  "additionalProperties": true,
+  "properties": {
+    "task_id": { "type": "string", "pattern": "^TASK-[0-9]{3,}$" },
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "FAIL"],
+      "description": "PASS only when the sole remaining findings are nits. Any blocker or concern means FAIL."
+    },
+    "summary": { "type": "string" },
+    "decision": {
+      "type": "string",
+      "enum": ["APPROVE", "REQUEST CHANGES"],
+      "description": "APPROVE only when all remaining findings are nits. Never approve with conditions."
+    },
+    "blockers": {
+      "type": "array",
+      "description": "Must be empty when verdict is PASS. Correctness, safety, scope violation, architecture drift.",
+      "items": { "$ref": "#/definitions/finding" }
+    },
+    "concerns": {
+      "type": "array",
+      "description": "Quality, maintainability, incomplete coverage.",
+      "items": { "$ref": "#/definitions/finding" }
+    },
+    "nits": {
+      "type": "array",
+      "description": "Style, naming, optional improvements.",
+      "items": { "$ref": "#/definitions/finding" }
+    },
+    "requirements_traceability": {
+      "type": "object",
+      "description": "Every AC must be satisfied and verified. Untraceable changes are scope creep.",
+      "properties": {
+        "all_criteria_satisfied": { "type": "boolean" },
+        "unsatisfied": { "type": "array", "items": { "type": "string" } },
+        "untraceable_changes": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" }
+      }
+    },
+    "architecture_drift": {
+      "type": "object",
+      "description": "Drift is a blocker even when the code works.",
+      "properties": {
+        "detected": { "type": "boolean" },
+        "details": { "type": "string" },
+        "violated_principles": { "type": "array", "items": { "type": "string" } },
+        "violated_adrs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "scope_assessment": {
+      "type": "object",
+      "properties": {
+        "matches_plan": { "type": "boolean" },
+        "files_outside_plan": { "type": "array", "items": { "type": "string" } },
+        "scope_creep": { "type": "boolean" },
+        "notes": { "type": "string" }
+      }
+    },
+    "complexity_assessment": {
+      "type": "object",
+      "properties": {
+        "could_be_simpler": { "type": "boolean" },
+        "speculative_generality": { "type": "array", "items": { "type": "string" } },
+        "dead_code": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" }
+      }
+    },
+    "test_quality": {
+      "type": "object",
+      "properties": {
+        "meaningful_assertions": { "type": "boolean" },
+        "important_paths_covered": { "type": "boolean" },
+        "tests_that_would_pass_when_broken": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" }
+      }
+    },
+    "consistency": {
+      "type": "object",
+      "properties": {
+        "follows_conventions": { "type": "boolean" },
+        "deviations": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "trim_instructions": {
+      "type": "string",
+      "description": "What to remove or simplify. Subtraction is a valid review outcome."
+    },
+    "specialist_reports_reviewed": {
+      "type": "array",
+      "description": "Which gate reports were considered. A review that ignores an activated specialist report is incomplete.",
+      "items": { "type": "string" }
+    },
+    "self_assessment": {
+      "type": "object",
+      "properties": {
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+        "could_not_verify": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "completed_at": { "type": "string" }
+  },
+  "definitions": {
+    "finding": {
+      "type": "object",
+      "required": ["file", "description", "fix"],
+      "description": "A blocker without a location is not actionable.",
+      "properties": {
+        "id": { "type": "string" },
+        "file": { "type": "string" },
+        "line": { "type": "integer" },
+        "description": { "type": "string", "minLength": 5 },
+        "fix": { "type": "string", "description": "What must change. Concrete, not a direction to investigate." },
+        "criterion_id": { "type": "string", "pattern": "^AC-[0-9]+$" }
+      }
+    }
+  }
+}

@@ -1,0 +1,131 @@
+# Refactor workflow — change structure without changing behavior.
+# The defining constraint: observable behavior must be identical before and after.
+# That makes characterization testing the core gate, not an afterthought.
+
+name: refactor
+description: Improve internal structure while preserving externally observable behavior, proven by characterization tests.
+
+entry:
+  command: /design
+  agent: orchestrator
+
+stages:
+
+  - id: intake
+    agent: orchestrator
+    artifact: intake.json
+    description: >
+      Classify; confirm this is behavior-preserving; identify the intended structural outcome; and
+      compare the request against every active task, recording the result in overlap_check. A likely
+      overlap must be adjudicated by the human before any further stage runs.
+    required: true
+    gates: [duplicate_check]
+    rule: >
+      If behavior is meant to change, this is a feature or bugfix, not a refactor. Misclassified
+      refactors are how "small cleanups" ship regressions.
+
+  - id: baseline
+    agent: qa
+    artifact: qa-report.json
+    reads: [intake.json]
+    description: >
+      Characterize current behavior before touching anything. Capture the existing contract —
+      inputs, outputs, error cases, boundaries — and record the test suite state as the baseline.
+      Any pre-existing failure is recorded as a known baseline, not fixed here.
+    required: true
+    rule: You cannot prove behavior is preserved without having captured it first.
+
+  - id: design
+    agent: tech-lead
+    artifact: design.json
+    reads: [qa-report.json]
+    description: Target structure, the interface that must remain unchanged, and the migration path.
+    required: true
+
+  - id: planning
+    agent: tech-lead
+    artifact: plan.json
+    reads: [design.json, qa-report.json]
+    description: Ordered, behavior-preserving steps. Steps that break the build are not acceptable steps.
+    required: true
+
+  - id: environment
+    agent: orchestrator
+    reads: [intake.json]
+    description: >
+      Confirm the development environment with the human before capturing the behavior baseline.
+      A baseline captured in the wrong environment records the wrong "before" state, which makes the
+      entire behavior-preservation proof invalid.
+    required: true
+    rule: See .cursor/rules/environment.mdc. Record the confirmation in worker-result.json -> environment.
+    on_unanswered: stop_and_wait
+
+  - id: implementation
+    agent: developer
+    artifact: worker-result.json
+    reads: [design.json, plan.json]
+    description: Refactor in small steps, running the suite between steps. No behavior change.
+    required: true
+    gates: [environment_confirmed]
+    rule: >
+      Report any behavior that had to change. A refactor that changes behavior is either a bugfix
+      or a regression — it must be surfaced, never smuggled.
+
+  - id: database_review
+    agent: database
+    artifact: db-report.json
+    reads: [design.json, worker-result.json]
+    description: Confirm no schema, index, or query semantics changed.
+    condition: specialists includes database
+    stage_position: parallel_with_qa
+    blocking: true
+
+  - id: performance
+    agent: performance
+    artifact: perf-report.json
+    reads: [design.json, worker-result.json]
+    description: >
+      Confirm the refactor did not regress the declared budget. Structural changes are a common
+      source of quiet performance regressions.
+    condition: specialists includes performance
+    stage_position: parallel_with_qa
+    blocking: true
+
+  - id: qa
+    agent: qa
+    artifact: qa-report.json
+    reads: [requirements.json, design.json, worker-result.json]
+    description: >
+      Verify behavior is identical to the baseline: the full suite passes, the characterized
+      contract is unchanged, and no new failures appeared.
+    required: true
+    blocking: true
+    on_fail: implementation
+
+  - id: review
+    agent: reviewer
+    artifact: review-report.json
+    reads: [design.json, worker-result.json, qa-report.json]
+    description: >
+      Confirm the target structure was actually achieved, the change is genuinely behavior-preserving,
+      and complexity decreased or stayed flat. A refactor that increases complexity has failed.
+    required: true
+    blocking: true
+    on_fail: implementation
+
+  - id: completion
+    agent: orchestrator
+    artifact: task.yaml
+    description: Confirm gates; record the structural decision as an ADR if it was architectural.
+    required: true
+
+gates_in_order: [qa, performance, database_review, review]
+
+rework:
+  route_to:
+    implementation_defect: developer
+    requirement_defect: product
+    design_defect: tech-lead
+    test_defect: qa
+    unclear_scope: orchestrator
+  re_enter_at: qa

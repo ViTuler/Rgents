@@ -1,0 +1,151 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "qa-report.schema.json",
+  "title": "qa-report.json",
+  "description": "Functional verification report. Sole writer: qa. NOT VERIFIED is a required verdict option so that honest gaps exist; untested is not the same as passing.",
+  "type": "object",
+  "required": ["task_id", "verdict", "criteria", "findings", "tests"],
+  "additionalProperties": true,
+  "properties": {
+    "task_id": { "type": "string", "pattern": "^TASK-[0-9]{3,}$" },
+    "verdict": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "SKIP"],
+      "description": "PASS requires every criterion at PASS or an orchestrator-accepted NOT VERIFIED, and no unresolved critical/major finding."
+    },
+    "summary": { "type": "string" },
+    "criteria": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Every AC from requirements.json gets a verdict. Derived independently — do not simply adopt the developer's claims.",
+      "items": {
+        "type": "object",
+        "required": ["criterion_id", "verdict", "evidence"],
+        "properties": {
+          "criterion_id": { "type": "string", "pattern": "^AC-[0-9]+$" },
+          "verdict": { "type": "string", "enum": ["PASS", "FAIL", "NOT VERIFIED"] },
+          "evidence": {
+            "type": "string",
+            "minLength": 5,
+            "description": "The actual command, request, or observation and its actual result. Not a restatement of the criterion."
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Each finding names the role that owns the defect. The orchestrator routes on this classification.",
+      "items": {
+        "type": "object",
+        "required": ["severity", "description", "owner"],
+        "properties": {
+          "id": { "type": "string" },
+          "severity": { "type": "string", "enum": ["critical", "major", "minor"] },
+          "description": { "type": "string" },
+          "reproduction": { "type": "string", "description": "Exact steps to reproduce. A finding without reproduction is not actionable." },
+          "expected": { "type": "string" },
+          "actual": { "type": "string" },
+          "file": { "type": "string" },
+          "line": { "type": "integer" },
+          "owner": {
+            "type": "string",
+            "enum": ["developer", "product", "tech-lead", "qa", "orchestrator"],
+            "description": "implementation_defect | requirement_defect | design_defect | test_defect | unclear_scope"
+          }
+        }
+      }
+    },
+    "tests": {
+      "type": "object",
+      "required": ["commands_run"],
+      "properties": {
+        "commands_run": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["command", "result"],
+            "properties": {
+              "command": { "type": "string" },
+              "result": { "type": "string", "enum": ["pass", "fail", "not_run", "error"] },
+              "output_summary": { "type": "string" },
+              "not_run_reason": { "type": "string" }
+            }
+          }
+        },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "edge_cases_tested": {
+      "type": "array",
+      "description": "Independently derived cases, not just the developer's list.",
+      "items": {
+        "type": "object",
+        "required": ["case", "verdict"],
+        "properties": {
+          "case": { "type": "string" },
+          "category": {
+            "type": "string",
+            "enum": ["happy_path", "empty", "duplicate", "expired", "unauthorized", "concurrent", "already_done", "partial_failure", "missing_dependency", "boundary", "regression", "integration"]
+          },
+          "verdict": { "type": "string", "enum": ["PASS", "FAIL", "NOT VERIFIED"] },
+          "evidence": { "type": "string" }
+        }
+      }
+    },
+    "regression": {
+      "type": "object",
+      "properties": {
+        "suite_run": { "type": "boolean" },
+        "pre_existing_failures": { "type": "array", "items": { "type": "string" } },
+        "new_failures": { "type": "array", "items": { "type": "string" } },
+        "notes": { "type": "string" }
+      }
+    },
+    "not_verified": {
+      "type": "array",
+      "description": "Everything that could not be verified, and why. This field exists so that covering a gap is never confused with closing it.",
+      "items": {
+        "type": "object",
+        "required": ["item", "reason"],
+        "properties": {
+          "item": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "mocks_used": {
+      "type": "array",
+      "description": "Where real behavior was mocked, and what that leaves unverified.",
+      "items": {
+        "type": "object",
+        "required": ["mock", "leaves_unverified"],
+        "properties": {
+          "mock": { "type": "string" },
+          "leaves_unverified": { "type": "string" }
+        }
+      }
+    },
+    "environment": { "type": "string", "description": "How the tests were run: runtime versions, services, fixtures." },
+    "failure_classification": {
+      "type": "object",
+      "description": "QA classifies the defect's owner. QA does not diagnose root cause or fix code.",
+      "properties": {
+        "classification": { "type": "string", "enum": ["implementation_defect", "plan_defect", "requirement_defect", "test_defect", "escalate"] },
+        "escalation_reason": { "type": "string" },
+        "fix_instruction": { "type": "string" }
+      }
+    },
+    "self_assessment": {
+      "type": "object",
+      "properties": {
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+        "uncertainty_areas": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "completed_at": { "type": "string" }
+  }
+}

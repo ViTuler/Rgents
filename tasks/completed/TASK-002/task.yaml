@@ -1,0 +1,68 @@
+# TASK-002 — lifecycle state and resume anchor
+#
+# A completed trivial-complexity task. Compare with tasks/active/TASK-001/ to see how much process
+# the classification removes: no design, no plan, no specialists, and no review gate, because a
+# copy change in one file with no interface change genuinely needs none of them.
+#
+# This is a record of a completed task, so all gates that were required have passed.
+
+task_id: "TASK-002"
+title: "Correct the empty-state copy on the projects list"
+workflow: "feature"
+status: "completed"
+current_stage: "done"
+
+classification:
+  complexity: "trivial"
+  risk: "low"
+  rationale: >
+    Trivial: one file, one layer, no new abstraction, no interface change. Low risk: no behavior
+    change beyond displayed text, no trust boundary, nothing irreversible.
+
+acceptance_criteria:
+  - id: "AC-1"
+    text: "The empty project list explains what the user can do next rather than stating that it is empty."
+    test_mapped: "src/projects/ProjectListEmpty.test.tsx"
+    status: "verified"
+  - id: "AC-2"
+    text: "The empty state offers a working path to create the first project."
+    test_mapped: "src/projects/ProjectListEmpty.test.tsx"
+    status: "verified"
+
+stages:
+  intake:
+    agent: "orchestrator"
+    result: "PASS"
+    summary: "trivial/low; no specialists activated; all six skip decisions recorded with reasons"
+    artifact_path: "tasks/completed/TASK-002/intake.json"
+  implementation:
+    agent: "developer"
+    result: "PASS"
+    summary: "one component and its test; 3 tests passing; no deviations, no concerns"
+    artifact_path: "tasks/completed/TASK-002/worker-result.json"
+  qa:
+    agent: "qa"
+    result: "PASS"
+    summary: "both criteria verified; full suite 415 passed; no findings"
+    artifact_path: "tasks/completed/TASK-002/qa-report.json"
+
+gates_required: ["qa"]
+gates_run: ["qa"]
+
+retries: {}
+
+routing_decisions: []
+
+human_signoff:
+  required: false
+  reason: "trivial complexity, low risk"
+
+lessons_recorded: []
+
+completed_at: "2026-02-20"
+
+running_summary: >
+  Trivial copy change completed in one implementation pass and one verification pass. No design,
+  plan, or specialist gate was required: the change alters no behavior, crosses no boundary, and
+  touches one file. The six skipped specialists each carry a recorded reason in intake.json, which
+  is what makes the reduced process auditable rather than merely assumed.

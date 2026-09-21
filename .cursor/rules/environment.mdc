@@ -1,0 +1,87 @@
+---
+description: Confirm the development environment with the human before running any build, lint, typecheck, or test command, and before starting implementation.
+alwaysApply: false
+globs:
+  - "**/package.json"
+  - "**/pyproject.toml"
+  - "**/requirements*.txt"
+  - "**/Cargo.toml"
+  - "**/go.mod"
+  - "**/pom.xml"
+  - "**/build.gradle*"
+  - "**/Gemfile"
+  - "**/composer.json"
+  - "**/environment.yml"
+  - "**/conda*.yaml"
+  - "**/.nvmrc"
+  - "**/Dockerfile*"
+  - "**/docker-compose*"
+---
+
+# Development environment rules
+
+## The gate: confirm the environment BEFORE development starts
+
+**Do not run a build, lint, typecheck, or test command until the human has confirmed which environment
+to use.** Record the confirmation, then proceed.
+
+This gate exists because an environment mismatch fails in a way that is *indistinguishable* from a code
+defect. `npm test` with the wrong Node version, or `pytest` outside the project's conda environment,
+produces `command not found`, `ModuleNotFoundError`, or an unrelated version error. Read naively, that
+looks like a failing build caused by the change under review — so it becomes a reported defect, triggers
+a rework cycle, and burns a full gate pass on a problem that was never in the code.
+
+**Confirming costs one message. Not confirming costs an entire rework cycle.**
+
+## What to detect and report
+
+Inspect the repository and report findings; do not silently pick. State what you found and what you
+would use.
+
+| Item | Where to look |
+|---|---|
+| Language runtime and version | `.nvmrc`, `.python-version`, `engines` in `package.json`, `requires-python`, toolchain files |
+| Environment manager | `environment.yml`, `conda*.yaml`, `pyproject.toml`, `venv`, `.tool-versions`, `Dockerfile` |
+| Package manager and lockfile | `package-lock.json` / `pnpm-lock.yaml` / `yarn.lock`, `poetry.lock`, `uv.lock`, `Pipfile.lock` |
+| Available environments | the machine's actual list, e.g. `conda env list` — and which one is active |
+| Required services | database, cache, queue, mail catcher, object store |
+| Required configuration | env vars named in docs, `.env.example`, config schemas |
+| Setup commands | install, migrate, seed — as the project documents them |
+| Expected green state | do the tests pass **before** the change? This is the baseline that separates a new failure from a pre-existing one |
+
+## What to ask the human
+
+Ask once, in one message, with your findings attached:
+
+1. Which environment should be used (the exact name / version)?
+2. Which commands are authoritative for install, lint, typecheck, and test?
+3. Which services must be running, and are they already?
+4. Which configuration values must be present?
+5. Does the suite pass on the current revision before the change?
+
+If the human does not answer, **stop and wait**. Do not guess and do not fall back to whatever is
+active by default.
+
+## After confirmation
+
+- Use exactly the confirmed environment and the confirmed commands. Do not substitute your own.
+- **Record the confirmation** in `worker-result.json → environment`, including `confirmed_by_user: true`.
+  The validator rejects an implementation report whose environment was not confirmed.
+- If a command fails, record the **real output**. A failure caused by the environment is reported as an
+  environment problem, not as an implementation defect — but it must not be used as an excuse to skip
+  verification. Fix the environment first, then re-run.
+
+## Never
+
+- Never run a mutating command against an environment you have not confirmed is the right one.
+- Never `conda activate` / `nvm use` / install packages globally without telling the human.
+- Never report "tests failed" when the real output was "command not found".
+- Never silently switch environments mid-run. If the environment must change, say so.
+- Never commit environment-specific absolute paths or machine-local configuration.
+- Never treat a missing tool as a code defect. It is an environment finding.
+
+## Pre-existing failures
+
+Establish the baseline **before** the change. A suite that was already partially failing must be
+recorded as such, or every pre-existing failure will be attributed to the change under review — the
+single most common source of wasted rework in an automated pipeline.
