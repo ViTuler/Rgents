@@ -35,18 +35,26 @@ a rework cycle, and burns a full gate pass on a problem that was never in the co
 
 ## What to detect and report
 
+**Prefer `.agent/project-baseline.yaml` when `status` is `established` (or `framework_meta`).**
+That file is the structured baseline filled at project-level spec/design. Do not ask the human to
+re-state the stack from scratch on every task; ask them to confirm the machine still matches the
+baseline, and that the suite is green on the current revision.
+
+If the baseline is still `template`, stop and escalate: product + tech-lead + human must establish it
+before implementation commands run.
+
 Inspect the repository and report findings; do not silently pick. State what you found and what you
 would use.
 
 | Item | Where to look |
 |---|---|
-| Language runtime and version | `.nvmrc`, `.python-version`, `engines` in `package.json`, `requires-python`, toolchain files |
-| Environment manager | `environment.yml`, `conda*.yaml`, `pyproject.toml`, `venv`, `.tool-versions`, `Dockerfile` |
-| Package manager and lockfile | `package-lock.json` / `pnpm-lock.yaml` / `yarn.lock`, `poetry.lock`, `uv.lock`, `Pipfile.lock` |
+| Language runtime and version | `.agent/project-baseline.yaml` → `stack`; else `.nvmrc`, `.python-version`, `engines`, `requires-python` |
+| Environment manager | baseline → `stack.environment_manager` / `environment_name`; else `environment.yml`, conda, venv |
+| Package manager and lockfile | baseline; else lockfiles in the repo |
 | Available environments | the machine's actual list, e.g. `conda env list` — and which one is active |
-| Required services | database, cache, queue, mail catcher, object store |
+| Required services | baseline → `services`; else docs / compose files |
 | Required configuration | env vars named in docs, `.env.example`, config schemas |
-| Setup commands | install, migrate, seed — as the project documents them |
+| Setup commands | baseline → `commands`; else project docs |
 | Expected green state | do the tests pass **before** the change? This is the baseline that separates a new failure from a pre-existing one |
 
 ## What to ask the human

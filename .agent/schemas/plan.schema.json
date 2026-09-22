@@ -49,14 +49,37 @@
     },
     "parallel_groups": {
       "type": "array",
-      "description": "Declared parallel-safe workstreams. The orchestrator rejects any that violate .agent/config.yaml parallelization rules.",
+      "description": "Declared parallel-safe workstreams (C2). Multi-step groups require streams[].claimed_paths that are pairwise disjoint; the orchestrator then uses path leases + git worktrees.",
       "items": {
         "type": "object",
         "required": ["group", "steps"],
+        "additionalProperties": true,
         "properties": {
           "group": { "type": "string" },
           "steps": { "type": "array", "items": { "type": "integer" } },
-          "rationale": { "type": "string" }
+          "rationale": { "type": "string" },
+          "streams": {
+            "type": "array",
+            "description": "Required when steps has two or more members. Each stream owns exclusive claimed_paths for one step.",
+            "items": {
+              "type": "object",
+              "required": ["step", "claimed_paths"],
+              "additionalProperties": true,
+              "properties": {
+                "step": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Must appear in this group's steps array."
+                },
+                "claimed_paths": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": { "type": "string", "minLength": 1 },
+                  "description": "Repository-relative paths this step may modify. Must include the step's file. Must not intersect sibling streams."
+                }
+              }
+            }
+          }
         }
       }
     },

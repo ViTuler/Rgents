@@ -1,0 +1,36 @@
+# Project technical baseline (structured)
+#
+# Filled once at project-level spec → design by human + product + tech-lead.
+# Per-task environment confirmation *reads* this file; it does not re-invent the stack.
+# docs/knowledge/project-memory.md may summarise this; it is not the source of truth.
+
+version: 1
+status: template
+
+decided_by:
+  human: false
+  product: false
+  tech_lead: false
+
+# decided_at: YYYY-MM-DD
+
+stack:
+  language: ""
+  runtime: ""
+  environment_manager: ""
+  environment_name: ""
+  package_manager: ""
+  frameworks: ""
+  notes: ""
+
+commands:
+  install: ""
+  lint: ""
+  typecheck: ""
+  test: ""
+  build: ""
+  run: ""
+
+services: []
+
+notes: ""

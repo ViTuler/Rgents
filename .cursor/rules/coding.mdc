@@ -47,6 +47,10 @@ globs:
 - Do not commit generated artifacts, build output, or vendored dependencies unless the project already does.
 - Do not modify unrelated files, and do not touch files outside your assigned scope.
 - Do not report a command as passing that you did not run.
+- **Role write boundaries (C5).** Product and reviewer must not modify application / business source
+  (for example under `src/` or product packages). Only the developer — and specialists within their
+  declared code-writing scope in `.agent/config.yaml → security` — may. Reviewers inspect `git diff`;
+  they do not apply fixes.
 
 ## Verification before reporting
 

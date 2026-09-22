@@ -12,8 +12,9 @@
 # known issues landing in a product repository, then one product's known issues landing in the
 # framework's template slot -- which is why the scaffolding step exists.
 #
-# Deliberately does NOT run `git init`. The human commits, so the first commit is an explicit
-# act rather than something a script did quietly.
+# Deliberately does NOT create the first commit or add a remote. Local `git init` is performed
+# via `.agent/tools/init_project.py` at the end of this script (C7). The human still owns the
+# first commit and any remote.
 #
 # Usage:
 #   ./.agent/tools/bootstrap-project.ps1 -Target <path-to-new-project> [-WithProductSkeleton]
@@ -103,6 +104,16 @@ foreach ($pair in @(
     Write-Output "  $($pair.dst)"
 }
 
+# The framework's own project-baseline.yaml is framework_meta. A product must start from the
+# empty template, not inherit the framework's stack.
+$BaselineTpl = Join-Path $FrameworkRoot '.agent\templates\project-baseline.yaml'
+$BaselineDst = Join-Path $Target '.agent\project-baseline.yaml'
+if (-not (Test-Path $BaselineTpl)) {
+    throw "framework template missing: $BaselineTpl"
+}
+Copy-Item $BaselineTpl $BaselineDst -Force
+Write-Output '  .agent/project-baseline.yaml (from template; status: template)'
+
 if ($WithProductSkeleton) {
     Write-Output ''
     Write-Output '== 3. optional product skeleton'
@@ -118,11 +129,21 @@ if ($WithProductSkeleton) {
 }
 
 Write-Output ''
+Write-Output '== 4. local git init (no remote) =='
+$InitPy = Join-Path $FrameworkRoot '.agent\tools\init_project.py'
+if (Test-Path $InitPy) {
+    & python $InitPy --target $Target
+} else {
+    Write-Output '  skipped: init_project.py not present; run it from the seeded project later'
+}
+
+Write-Output ''
 Write-Output '== done =='
 Write-Output 'Next, and not done by this script:'
-Write-Output '  1. git init, then commit the seeded framework before any task work starts, so that the'
-Write-Output '     implementation gate can compare a plan against a real diff.'
-Write-Output '  2. Fill in docs/knowledge/project-memory.md: stack, exact commands, constraints.'
-Write-Output '  3. Confirm the environment with a human, then run:'
+Write-Output '  1. Create the first commit yourself when ready (init does not commit).'
+Write-Output '  2. Project-level spec/design: human + product + tech-lead fill'
+Write-Output '     .agent/project-baseline.yaml and set status: established.'
+Write-Output '     docs/knowledge/project-memory.md may summarise it; it is not the source of truth.'
+Write-Output '  3. Confirm the environment against that baseline, then run:'
 Write-Output '     python .agent/tools/validate.py --check-setup'
 Write-Output '     python .agent/tools/validate.py --selftest'

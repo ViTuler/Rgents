@@ -1,11 +1,13 @@
 # `.agent/tools/` — framework tooling
 
-Tools here act **on** a project. They are not part of a project.
+Tools here act **on** a project. They are not part of a product application's business logic.
 
 | File | Runs where | Copied into a project? |
 |---|---|---|
-| `validate.py` | inside a project (`python .agent/tools/validate.py ...`) | **yes** — it is the gate machinery, and every project needs it |
-| `bootstrap-project.ps1` | from the framework, pointed at a new project | **no** — the bootstrap removes it from the target |
+| `validate.py` | inside a project (`python .agent/tools/validate.py ...`) | **yes** — gate machinery |
+| `init_project.py` (+ `.cmd` / `.ps1` / `.sh`) | inside a project or pointed at `--target` | **yes** — local `git init`, no remote |
+| `parallel_worktree.py` | inside a project when a plan uses `parallel_group` | **yes** — path leases, merge lock, git worktrees (C2) |
+| `bootstrap-project.ps1` | from the framework, pointed at a new project | **no** — removed from the target |
 | `bootstrap-product-skeleton.ps1` | from the framework, via `-WithProductSkeleton` | **no** — same reason |
 
 ## Why some tools are removed from the target
@@ -24,13 +26,19 @@ bootstrap's exclusion list, not something to leave lying in the target.
 ./.agent/tools/bootstrap-project.ps1 -Target <new-project-path> [-WithProductSkeleton]
 ```
 
-It refuses to seed into a non-empty directory, derives the framework root from its own location (so it
-carries no machine-specific path and runs from any working directory), copies the framework surfaces,
-scaffolds the knowledge files from `.agent/templates/knowledge/`, and creates empty task lanes.
+It refuses to seed into a non-empty directory, derives the framework root from its own location,
+copies the framework surfaces, scaffolds knowledge files and **`.agent/project-baseline.yaml` from
+the empty template** (never the framework's own `framework_meta` baseline), creates empty task lanes,
+and runs `init_project.py` so the target has a local git repo **without** a remote.
 
-**It does not run `git init`.** The human commits, so the first commit is an explicit act. It must
-happen before task work starts, or the implementation gate has no real diff to compare a plan against
-and silently degrades to a warning.
+**It does not create the first commit or add a remote.** The human owns those.
+
+## Initializing git alone
+
+```
+python .agent/tools/init_project.py
+python .agent/tools/init_project.py --target <path> --ensure-baseline
+```
 
 ## What the bootstrap deliberately does not copy
 
@@ -48,6 +56,4 @@ project. That mistake was made twice while this framework was being tested: fram
 landed in a product repository, and then one product's known issues landed back in the framework's
 template slot. Both are the same defect in opposite directions.
 
-The fix is structural, not a reminder: the scaffolded files come from `.agent/templates/knowledge/`,
-which is a template directory and therefore never accumulates project facts, and the bootstrap fails
-loudly if a template is missing rather than falling back to whatever the framework is carrying.
+Scaffolding from `.agent/templates/knowledge/` (and the project-baseline template) is the fix.

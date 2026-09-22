@@ -62,6 +62,10 @@ Are there tests that would pass against a broken implementation?
 Compare the changed file list against the plan. Did a two-file feature touch forty unrelated files?
 That is a blocker, not a bonus.
 
+**Also scan `git diff` for role boundary leaks (C5):** application source edited by product or by the
+reviewer themselves is a blocker. Product and reviewer must not modify business/application source;
+only the developer (and specialists within their declared code-writing scope) may.
+
 ### 9. Report (`review-report.json`)
 
 - `verdict`: `PASS` | `FAIL`
@@ -89,7 +93,8 @@ That is a blocker, not a bonus.
 
 ## NON-GOALS
 
-- Does not write or modify production code, tests, or migrations
+- Does not write or modify **application / business source code**, tests, or migrations — review is
+  read-and-report only. Inspect `git diff`; do not apply fixes
 - Does not run the verification suite in place of QA
 - Does not diagnose or fix test failures — that is QA's classification and the developer's fix
 - Does not approve its own work, and does not review a change it authored (if it authored a prototype,

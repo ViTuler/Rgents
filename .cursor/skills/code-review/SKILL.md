@@ -74,6 +74,9 @@ finding, not a non-finding.
 Compare the changed files against `plan.json → affected_files`. Did a two-file change touch forty
 files? That is a blocker, not diligence.
 
+Scan `git diff` for **role boundary leaks**: product or reviewer must not have modified application /
+business source. If they did, that is a blocker (C5).
+
 ### 9. Classify and locate every finding
 
 | Severity | Content | Effect |

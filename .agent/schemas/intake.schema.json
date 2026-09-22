@@ -50,6 +50,56 @@
       "description": "Gates that must PASS before completion, derived from risk."
     },
     "human_signoff_required": { "type": "boolean" },
+    "classification_confirmation": {
+      "type": "object",
+      "description": "Required when complexity is trivial: the human must confirm the classification before implementation (or before QA on the trivial path). Cuts process only with an explicit human decision.",
+      "required": ["decided_by"],
+      "additionalProperties": true,
+      "properties": {
+        "decided_by": {
+          "type": "string",
+          "enum": ["human"],
+          "description": "Must be human. Orchestrator may propose trivial; only a human may confirm it."
+        },
+        "confirmed_at": {
+          "type": "string",
+          "description": "When the human confirmed (ISO date or datetime)."
+        },
+        "note": {
+          "type": "string",
+          "description": "Optional short rationale from the human."
+        }
+      }
+    },
+    "model_assignments": {
+      "type": "object",
+      "description": "C1: per-role Task model slugs suggested by the orchestrator. Agent frontmatter may stay inherit; this object plus the Task model argument is the audit truth. Do not assign the root orchestrator. Use assigned_model (never claim executed_model).",
+      "additionalProperties": true,
+      "properties": {
+        "qa": { "$ref": "#/definitions/model_assignment_entry" },
+        "reviewer": { "$ref": "#/definitions/model_assignment_entry" },
+        "security": { "$ref": "#/definitions/model_assignment_entry" },
+        "developer": { "$ref": "#/definitions/model_assignment_entry" },
+        "product": { "$ref": "#/definitions/model_assignment_entry" },
+        "tech-lead": { "$ref": "#/definitions/model_assignment_entry" },
+        "ux": { "$ref": "#/definitions/model_assignment_entry" },
+        "devops": { "$ref": "#/definitions/model_assignment_entry" },
+        "database": { "$ref": "#/definitions/model_assignment_entry" },
+        "data": { "$ref": "#/definitions/model_assignment_entry" },
+        "performance": { "$ref": "#/definitions/model_assignment_entry" },
+        "escalation": {
+          "type": "object",
+          "description": "Required when fewer than three distinct IDE-dispatchable models exist and same-model would otherwise be needed for the review triangle.",
+          "required": ["decided_by", "reason"],
+          "additionalProperties": true,
+          "properties": {
+            "decided_by": { "type": "string", "enum": ["human"] },
+            "reason": { "type": "string", "minLength": 10 },
+            "allow_same_model": { "type": "boolean" }
+          }
+        }
+      }
+    },
     "parallel_groups": {
       "type": "array",
       "description": "Workstreams the plan declares parallel-safe. Validated against .agent/config.yaml parallelization rules.",
@@ -190,5 +240,28 @@
     },
     "created_at": { "type": "string" },
     "updated_at": { "type": "string" }
+  },
+  "definitions": {
+    "model_assignment_entry": {
+      "type": "object",
+      "required": ["assigned_model"],
+      "additionalProperties": true,
+      "properties": {
+        "assigned_model": {
+          "type": "string",
+          "minLength": 1,
+          "description": "IDE-dispatchable slug from .agent/models/available.yaml (ide_slug). Audit field only — do not invent executed_model."
+        },
+        "rationale": { "type": "string" },
+        "overridden_by": {
+          "type": "string",
+          "description": "Role or human that changed the next dispatch assignment."
+        },
+        "unavailable_in_ide": {
+          "type": "boolean",
+          "description": "True when the catalog id is not in the session's available_subagent_models intersection; must not be used as the dispatch slug."
+        }
+      }
+    }
   }
 }

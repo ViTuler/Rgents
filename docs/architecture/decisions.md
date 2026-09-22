@@ -128,3 +128,36 @@ breaks a downstream gate; free-form nuance must be forced into fields.
 | Pass artifact contents inline in the prompt | Reintroduces unbounded context and stale-copy risk |
 | A shared conversational memory | Not auditable, not resumable, and grows without limit |
 | A database or service for state | Adds an install and a failure mode for something a directory does adequately |
+
+---
+
+## ADR-003 — Framework correction package C0–C7 (accepted)
+
+- **Status:** accepted
+- **Date:** 2026-09-22
+- **Task:** correction backlog (batches A–D, main-thread bypass)
+- **Deciders:** human owner
+
+### Context
+
+实测与设计评审暴露：可移植性误扫运行记录、审查三角模型同源、并行无隔离、trivial 分类可裁掉工序、门检会话内自证、无项目基线契约、播种后无本地 git 等。详见 `docs/architecture/correction-backlog.md`。
+
+### Decision
+
+按该清单冻结的 C0–C7 方案实施；批次 A(C0/C6/C7) → B(C3/C4) → C(C5/C1) → D(C2)。会话外 CI 重跑测试本包不做。
+
+### Consequences
+
+**Easier:** 信任根与并行语义可机械执行；新项目可本地 git + 基线 + 模型目录；并行步有 path lease + worktree。
+
+**Harder:** 治理面与 validate 变更面大；C1 依赖 API Key 或种子；C2 增加 worktree/锁运维。
+
+### Alternatives rejected
+
+| Alternative | Why rejected |
+|---|---|
+| 仅靠字段名豁免可移植性 | 已实测挡不住 summary/数组等路径 |
+| frontmatter 写死三模型 | 不如目录+assignments+互异校验可移植 |
+| MD5 文件账本约束写权 | 成本高于收益 |
+| 并行仍共工作区只靠提示 | 无法防止真实竞态 |
+

@@ -130,6 +130,11 @@
       }
     },
     "environment": { "type": "string", "description": "How the tests were run: runtime versions, services, fixtures." },
+    "validate_log_ids": {
+      "type": "array",
+      "description": "UUIDs of validate.py audit logs under tasks/<TASK-ID>/logs/ that this report relies on (C4). PASS requires at least one id that resolves to an exit_code 0 log.",
+      "items": { "type": "string", "minLength": 8 }
+    },
     "failure_classification": {
       "type": "object",
       "description": "QA classifies the defect's owner. QA does not diagnose root cause or fix code.",

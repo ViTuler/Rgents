@@ -3,31 +3,75 @@
   "verdict": "PASS",
   "summary": "Both acceptance criteria verified by rendering the empty state and asserting the copy and the link target. No findings.",
   "criteria": [
-    { "criterion_id": "AC-1", "verdict": "PASS", "evidence": "Rendered ProjectListEmpty with an empty projects array and asserted the text 'No projects yet. Create your first project to get started.' is present." },
-    { "criterion_id": "AC-2", "verdict": "PASS", "evidence": "Asserted the rendered create-project link resolves to /projects/new, and confirmed the route exists in the router." }
+    {
+      "criterion_id": "AC-1",
+      "verdict": "PASS",
+      "evidence": "Rendered ProjectListEmpty with an empty projects array and asserted the text 'No projects yet. Create your first project to get started.' is present."
+    },
+    {
+      "criterion_id": "AC-2",
+      "verdict": "PASS",
+      "evidence": "Asserted the rendered create-project link resolves to /projects/new, and confirmed the route exists in the router."
+    }
   ],
   "findings": [],
   "tests": {
     "commands_run": [
-      { "command": "npm test -- src/projects/ProjectListEmpty.test.tsx", "result": "pass", "output_summary": "3 passed, 0 failed" },
-      { "command": "npm test", "result": "pass", "output_summary": "415 passed, 0 failed, 3 skipped (pre-existing)" }
+      {
+        "command": "npm test -- src/projects/ProjectListEmpty.test.tsx",
+        "result": "pass",
+        "output_summary": "3 passed, 0 failed"
+      },
+      {
+        "command": "npm test",
+        "result": "pass",
+        "output_summary": "415 passed, 0 failed, 3 skipped (pre-existing)"
+      }
     ],
     "passed": 415,
     "failed": 0,
     "skipped": 3
   },
   "edge_cases_tested": [
-    { "case": "empty project list", "category": "happy_path", "verdict": "PASS", "evidence": "copy and link both rendered" },
-    { "case": "non-empty project list renders the list, not the empty state", "category": "regression", "verdict": "PASS", "evidence": "existing ProjectList test still passes unchanged" },
-    { "case": "full pre-existing suite", "category": "regression", "verdict": "PASS", "evidence": "415 passed, 0 failed" }
+    {
+      "case": "empty project list",
+      "category": "happy_path",
+      "verdict": "PASS",
+      "evidence": "copy and link both rendered"
+    },
+    {
+      "case": "non-empty project list renders the list, not the empty state",
+      "category": "regression",
+      "verdict": "PASS",
+      "evidence": "existing ProjectList test still passes unchanged"
+    },
+    {
+      "case": "full pre-existing suite",
+      "category": "regression",
+      "verdict": "PASS",
+      "evidence": "415 passed, 0 failed"
+    }
   ],
-  "regression": { "suite_run": true, "pre_existing_failures": [], "new_failures": [], "notes": "The 3 skips pre-date this change." },
+  "regression": {
+    "suite_run": true,
+    "pre_existing_failures": [],
+    "new_failures": [],
+    "notes": "The 3 skips pre-date this change."
+  },
   "not_verified": [
-    { "item": "How the copy reads to a real user",
-      "reason": "Copy quality is a product judgement, not a verifiable behavior; the requester should confirm the wording." }
+    {
+      "item": "How the copy reads to a real user",
+      "reason": "Copy quality is a product judgement, not a verifiable behavior; the requester should confirm the wording."
+    }
   ],
   "mocks_used": [],
   "environment": "Local Node 20 runtime, jest, jsdom.",
-  "self_assessment": { "confidence": "high", "uncertainty_areas": [] },
-  "completed_at": "2026-02-20"
+  "self_assessment": {
+    "confidence": "high",
+    "uncertainty_areas": []
+  },
+  "completed_at": "2026-02-20",
+  "validate_log_ids": [
+    "e4fdcaa1-7306-465a-a4c4-0fdf8460ea40"
+  ]
 }
