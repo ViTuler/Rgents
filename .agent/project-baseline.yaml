@@ -1,0 +1,35 @@
+# Project technical baseline for the Rgents *framework* repository itself.
+#
+# This repo is not a product application. Product projects copy the template and set
+# status: established after their project-level spec/design.
+
+version: 1
+status: framework_meta
+
+decided_by:
+  human: true
+  product: false
+  tech_lead: true
+
+decided_at: "2026-09-22"
+
+stack:
+  language: "Python"
+  runtime: "Python 3.8+"
+  environment_manager: "conda (use a named env such as vi; never install into base)"
+  environment_name: "vi"
+  package_manager: "stdlib only for validate.py; no pip required for gates"
+  frameworks: "Cursor agent team (Rgents); zero-dependency validate.py"
+  notes: "Framework repository. Product stack is decided in each consuming project baseline."
+
+commands:
+  install: "none (stdlib)"
+  lint: "none required"
+  typecheck: "none required"
+  test: "python .agent/tools/validate.py --selftest"
+  build: "none"
+  run: "python .agent/tools/validate.py --check-setup"
+
+services: []
+
+notes: "Authoritative gate commands live here. Task environment confirmation for framework work should cite this baseline rather than rediscovering the stack each time."

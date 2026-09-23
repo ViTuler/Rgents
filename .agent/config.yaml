@@ -43,6 +43,8 @@ complexity:
     design_required: false
     plan_required: false
     review_required: false
+    # C3: cutting design/plan/review is allowed only after the human confirms the label.
+    human_confirmation_required: true
 
   standard:
     description: "3+ files, or crosses a layer boundary, or needs tests across modules."
@@ -447,15 +449,28 @@ escalation:
 
 parallelization:
   default: sequential
+  # C2: when a plan declares a multi-step parallel_group, the orchestrator must
+  # acquire path leases, add a git worktree per stream, and hold the merge lock
+  # while integrating. See .agent/tools/parallel_worktree.py.
+  worktree:
+    root: .rgents/worktrees
+    branch_prefix: rgents/
+    integrate_branch_suffix: /integrate
+    path_lease_ttl_hours: 8
+    merge_lock_ttl_hours: 8
+    lock_index: .rgents/locks/index.json
   allowed_when:
     - "the plan declares the workstreams under a shared `parallel_group`"
     - "the workstreams write to disjoint file sets"
+    - "each multi-step parallel_group lists streams[].claimed_paths that are pairwise disjoint"
     - "no workstream consumes an interface another workstream is still defining"
     - "no workstream touches a shared schema, migration, or public contract"
   forbidden:
     - "two agents editing the same file"
     - "a frontend workstream consuming an API contract that is still being designed"
     - "parallel execution when the plan declares dependencies between the streams"
+    - "parallel steps writing in the main worktree instead of .rgents/worktrees/<task>/<step>/"
+    - "merging parallel branches without holding the task merge lock"
 
 # ---------------------------------------------------------------------------
 # Governance — human-owned surfaces
@@ -499,7 +514,18 @@ model_guidance:
   data: fast
   performance: strong-coding
 
+# C1 — model catalog + per-task assignments (intake.json → model_assignments).
+# Agent frontmatter may stay `model: inherit`. The orchestrator passes Task `model` from assignments.
+# Root orchestrator is never assigned (human picks the main-thread model in the UI).
+model_policy:
+  catalog_path: .agent/models/available.yaml
+  seed_path: .agent/models/seed.yaml
+  hard_distinct_roles: [qa, reviewer, security]
+  soft_distinct_from_triangle: [developer]
+  catalog_stale_days: 30
+
 security:
+  # C5: product and reviewer are intentionally absent — they do not write application source.
   agents_that_may_write_application_code: [developer]
   agents_that_may_write_tests: [developer, qa, security]
   agents_that_may_run_commands: [developer, qa, security, devops, database, performance]

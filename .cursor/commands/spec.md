@@ -22,11 +22,28 @@ Turn a request into a classified task with testable requirements.
    - create `tasks/active/<TASK-ID>/`
    - write `intake.json` — type, complexity, risk, layers, **activated specialists, and skipped
      specialists with a reason for each skip**
+   - for non-trivial tasks, also write **`model_assignments`** (C1): `assigned_model` slugs for
+     `qa` / `reviewer` / (when activated) `security`, pairwise distinct, from
+     `.agent/models/available.yaml` ∩ the session allow-list. Pass each slug as the Task `model`
+     when dispatching. Do not assign the root orchestrator.
    - select the workflow (`feature` | `bugfix` | `refactor` | `incident`)
 
 3. If complexity is not `trivial`, dispatch **product**, which writes
    `requirements.json`: goal, actors, user stories, acceptance criteria with stable `AC-*` IDs,
    business rules, edge cases, out-of-scope items, assumptions.
+
+   If complexity **is** `trivial`, **stop for human confirmation** before implementation/QA. Record
+   in `intake.json`:
+
+   ```json
+   "classification_confirmation": {
+     "decided_by": "human",
+     "confirmed_at": "YYYY-MM-DD",
+     "note": "optional"
+   }
+   ```
+
+   `standard` / `complex` do not need this field.
 
 ## What to report back
 

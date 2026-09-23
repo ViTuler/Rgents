@@ -1,0 +1,67 @@
+# Lightweight framework CI (N3).
+# Shape and configuration only — does NOT re-run product tests.
+# validate trusts developer/QA reports; this workflow only checks invariants.
+
+name: framework-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: framework-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  selftest:
+    name: validate --selftest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run selftest
+        run: python .agent/tools/validate.py --selftest
+
+  check-setup:
+    name: validate --check-setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run check-setup
+        run: python .agent/tools/validate.py --check-setup
+
+  changed-active-tasks:
+    name: validate --ci-changed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need enough history for base...HEAD on PRs and push events.
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Shape-check changed tasks/active ( --all )
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git fetch origin "$BASE_REF" --depth=1
+            BASE="origin/${BASE_REF}"
+          else
+            BASE="${BEFORE_SHA}"
+            if [ -z "$BASE" ] || echo "$BASE" | grep -Eq '^0+$'; then
+              echo "No usable before SHA; skipping ci-changed."
+              exit 0
+            fi
+          fi
+          python .agent/tools/validate.py --ci-changed --base "$BASE"

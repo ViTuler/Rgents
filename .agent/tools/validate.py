@@ -18,6 +18,7 @@ Usage
 -----
     python .agent/tools/validate.py --selftest
     python .agent/tools/validate.py --check-setup
+    python .agent/tools/validate.py --ci-changed --base origin/main
     python .agent/tools/validate.py --artifact tasks/TASK-001/plan.json
     python .agent/tools/validate.py --task TASK-001 --stage plan
     python .agent/tools/validate.py --task TASK-001 --stage implementation
@@ -36,10 +37,15 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
+import os
 import re
+import stat
 import subprocess
 import sys
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 # --------------------------------------------------------------------------------------
@@ -251,7 +257,8 @@ def read_frontmatter(text: str) -> tuple[dict, str]:
 
 
 def load_json(path: Path) -> object:
-    with path.open("r", encoding="utf-8") as handle:
+    # utf-8-sig tolerates editors/PowerShell that write a BOM.
+    with path.open("r", encoding="utf-8-sig") as handle:
         return json.load(handle)
 
 
@@ -712,7 +719,7 @@ def check_plan(plan: dict, problems: Report) -> None:
                 "plan.json",
             )
 
-    # parallel groups must reference real steps
+    # parallel groups must reference real steps, claim disjoint paths (C2), and avoid depends_on cycles
     declared = {s.get("order") for s in steps if isinstance(s, dict)}
     for group in plan.get("parallel_groups") or []:
         if not isinstance(group, dict):
@@ -724,6 +731,8 @@ def check_plan(plan: dict, problems: Report) -> None:
                     f"parallel group '{group.get('group')}' references unknown step {step_order}",
                     "plan.json",
                 )
+
+    check_parallel_claimed_paths(plan, problems)
 
     # dependency sanity
     for step in steps:
@@ -742,6 +751,25 @@ def check_plan(plan: dict, problems: Report) -> None:
                     f"step {step['order']} depends on step {dependency}, which is not earlier",
                     "plan.json",
                 )
+
+
+def check_parallel_claimed_paths(plan: dict, problems: Report) -> None:
+    """C2: multi-step parallel_groups need pairwise-disjoint streams[].claimed_paths."""
+    tools_dir = Path(__file__).resolve().parent
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    try:
+        from parallel_worktree import check_plan_disjoint  # noqa: WPS433
+    except ImportError as exc:
+        problems.error(
+            "parallel_worktree_import",
+            f"cannot import parallel_worktree.py for C2 checks: {exc}",
+            "plan.json",
+        )
+        return
+    for message in check_plan_disjoint(plan):
+        check_id = "parallel_depends_on" if "depends_on" in message else "parallel_claimed_paths"
+        problems.error(check_id, message, "plan.json")
 
 
 def check_implementation(task_dir: Path, plan: dict, problems: Report) -> None:
@@ -1307,6 +1335,9 @@ def stage_duplicate_check(task_dir: Path, problems: Report) -> None:
         problems.error("intake_shape", "intake.json must be an object", str(task_dir.name))
         return
 
+    check_trivial_classification_gate(intake, problems)
+    check_model_assignments(intake, problems)
+
     overlap = intake.get("overlap_check")
     if not isinstance(overlap, dict):
         problems.error(
@@ -1473,6 +1504,405 @@ def stage_duplicate_check(task_dir: Path, problems: Report) -> None:
 # Stage orchestration
 # --------------------------------------------------------------------------------------
 
+_STAGE_PRIMARY_ARTIFACT = {
+    "duplicate_check": "intake.json",
+    "plan": "plan.json",
+    "implementation": "worker-result.json",
+    "implement": "worker-result.json",
+    "qa": "qa-report.json",
+    "test": "qa-report.json",
+    "review": "review-report.json",
+}
+
+
+def check_trivial_classification_gate(intake: dict, problems: Report) -> None:
+    """C3: trivial may cut process only after an explicit human confirmation."""
+    if intake.get("complexity") != "trivial":
+        return
+    confirmation = intake.get("classification_confirmation")
+    if not isinstance(confirmation, dict) or confirmation.get("decided_by") != "human":
+        problems.error(
+            "trivial_needs_human",
+            "complexity is trivial but classification_confirmation.decided_by is not 'human'. "
+            "A trivial classification removes design, plan, and review; only a human may confirm "
+            "that cut. Record classification_confirmation before implementation or QA.",
+            "intake.json",
+        )
+
+
+_INHERIT_SLUG = "inherit"
+
+
+def load_model_catalog(root: Path | None = None) -> dict | None:
+    """Load `.agent/models/available.yaml`. Returns None when absent."""
+    base = root or REPO_ROOT
+    path = base / ".agent" / "models" / "available.yaml"
+    if not path.is_file():
+        return None
+    data = parse_yaml(path.read_text(encoding="utf-8"))
+    return data if isinstance(data, dict) else None
+
+
+def catalog_ide_slugs(catalog: dict | None) -> set[str]:
+    if not isinstance(catalog, dict):
+        return set()
+    models = catalog.get("models")
+    if not isinstance(models, list):
+        return set()
+    slugs: set[str] = set()
+    for item in models:
+        if isinstance(item, dict):
+            slug = item.get("ide_slug") or item.get("id")
+            if isinstance(slug, str) and slug:
+                slugs.add(slug)
+    return slugs
+
+
+def triangle_roles_for_intake(intake: dict) -> list[str]:
+    """Roles that must carry pairwise-distinct assigned_model for this task."""
+    roles = ["qa", "reviewer"]
+    activated = intake.get("activated_specialists") or []
+    gates = intake.get("blocking_gates") or []
+    if "security" in activated or "security" in gates:
+        roles.append("security")
+    return roles
+
+
+def assignment_slug(entry: object) -> str | None:
+    if not isinstance(entry, dict):
+        return None
+    model = entry.get("assigned_model")
+    if isinstance(model, str) and model.strip():
+        return model.strip()
+    return None
+
+
+def check_model_assignments(intake: dict, problems: Report, *, catalog: dict | None = None) -> None:
+    """C1: non-trivial tasks need model_assignments; qa/reviewer/security pairwise distinct."""
+    if intake.get("complexity") == "trivial":
+        return
+
+    assignments = intake.get("model_assignments")
+    if not isinstance(assignments, dict):
+        problems.error(
+            "model_assignments_required",
+            "complexity is not trivial but model_assignments is missing. Orchestrator must record "
+            "per-role assigned_model slugs (qa/reviewer/security pairwise distinct) before dispatch.",
+            "intake.json",
+        )
+        return
+
+    if "orchestrator" in assignments:
+        problems.error(
+            "model_assignments_orchestrator",
+            "model_assignments must not include orchestrator; the root model is chosen in the UI",
+            "intake.json",
+        )
+
+    roles = triangle_roles_for_intake(intake)
+    catalog = catalog if catalog is not None else load_model_catalog()
+    known = catalog_ide_slugs(catalog)
+    slugs: dict[str, str] = {}
+
+    for role in roles:
+        entry = assignments.get(role)
+        slug = assignment_slug(entry)
+        if not slug:
+            problems.error(
+                "model_assignment_missing",
+                f"model_assignments.{role}.assigned_model is required for this task's review triangle",
+                "intake.json",
+            )
+            continue
+        if slug == _INHERIT_SLUG:
+            problems.error(
+                "model_assignment_inherit",
+                f"model_assignments.{role}.assigned_model must not be 'inherit' "
+                "(inherit collapses independent review)",
+                "intake.json",
+            )
+            continue
+        if isinstance(entry, dict) and entry.get("unavailable_in_ide") is True:
+            problems.error(
+                "model_assignment_unavailable",
+                f"model_assignments.{role} is marked unavailable_in_ide; pick a dispatchable slug "
+                "from the catalog ∩ session allow-list",
+                "intake.json",
+            )
+            continue
+        if known and slug not in known:
+            problems.error(
+                "model_assignment_unknown",
+                f"model_assignments.{role}.assigned_model {slug!r} is not in "
+                ".agent/models/available.yaml; run init --refresh-models or fix the slug",
+                "intake.json",
+            )
+            continue
+        slugs[role] = slug
+
+    if len(slugs) < 2:
+        return
+
+    escalation = assignments.get("escalation") if isinstance(assignments.get("escalation"), dict) else {}
+    allow_same = (
+        escalation.get("decided_by") == "human"
+        and escalation.get("allow_same_model") is True
+    )
+
+    pairs = [(a, b) for i, a in enumerate(roles) for b in roles[i + 1 :] if a in slugs and b in slugs]
+    collisions = [(a, b) for a, b in pairs if slugs[a] == slugs[b]]
+    if collisions and not allow_same:
+        detail = ", ".join(f"{a}/{b}={slugs[a]}" for a, b in collisions)
+        problems.error(
+            "model_triangle_not_distinct",
+            f"qa/reviewer/security assigned_model values must be pairwise distinct "
+            f"(collisions: {detail}). Escalate to a human with escalation.allow_same_model "
+            "if fewer than enough IDE-dispatchable models exist — never silently share a model.",
+            "intake.json",
+        )
+
+    developer = assignment_slug(assignments.get("developer"))
+    if developer and developer in slugs.values() and developer != _INHERIT_SLUG:
+        problems.warn(
+            "model_developer_overlaps_triangle",
+            f"developer assigned_model {developer!r} overlaps the review triangle; prefer a "
+            "different model when the catalog has spare capacity",
+            "intake.json",
+        )
+
+
+def check_models_catalog(problems: Report) -> None:
+    """C1 setup: seed + available catalogs must exist and list enough non-inherit slugs."""
+    seed = REPO_ROOT / ".agent" / "models" / "seed.yaml"
+    available = REPO_ROOT / ".agent" / "models" / "available.yaml"
+    if not seed.is_file():
+        problems.error(
+            "models_seed_missing",
+            "missing .agent/models/seed.yaml (manual_seed adapter for init --refresh-models)",
+            ".agent/models/seed.yaml",
+        )
+    if not available.is_file():
+        problems.error(
+            "models_catalog_missing",
+            "missing .agent/models/available.yaml. Run: python .agent/tools/init_project.py --refresh-models",
+            ".agent/models/available.yaml",
+        )
+        return
+    try:
+        catalog = load_model_catalog()
+    except Exception as exc:  # noqa: BLE001
+        problems.error("models_catalog_parse", f"cannot parse model catalog: {exc}", ".agent/models/available.yaml")
+        return
+    if not isinstance(catalog, dict):
+        problems.error("models_catalog_shape", "available.yaml must be a mapping", ".agent/models/available.yaml")
+        return
+    slugs = {s for s in catalog_ide_slugs(catalog) if s != _INHERIT_SLUG}
+    if len(slugs) < 3:
+        problems.warn(
+            "models_catalog_thin",
+            f"catalog has only {len(slugs)} non-inherit slug(s); qa/reviewer/security need three "
+            "distinct models or a human escalation.allow_same_model",
+            ".agent/models/available.yaml",
+        )
+    else:
+        problems.note(f"model catalog: {len(slugs)} non-inherit slug(s), source={catalog.get('source')!r}")
+    fetched = catalog.get("fetched_at")
+    if isinstance(fetched, str) and fetched:
+        try:
+            fetched_date = datetime.strptime(fetched[:10], "%Y-%m-%d").date()
+            age_days = (datetime.now(timezone.utc).date() - fetched_date).days
+            if age_days > 30:
+                problems.warn(
+                    "models_catalog_stale",
+                    f"available.yaml fetched_at is {age_days} days old; consider "
+                    "python .agent/tools/init_project.py --refresh-models",
+                    ".agent/models/available.yaml",
+                )
+        except ValueError:
+            problems.warn(
+                "models_catalog_fetched_at",
+                f"fetched_at {fetched!r} is not YYYY-MM-DD",
+                ".agent/models/available.yaml",
+            )
+
+
+def task_artifact_hashes(task_dir: Path) -> dict[str, str]:
+    """SHA-256 of known task artifacts present on disk (C4 anchors)."""
+    names = {
+        "intake.json",
+        "requirements.json",
+        "design.json",
+        "plan.json",
+        "worker-result.json",
+        "qa-report.json",
+        "review-report.json",
+        "security-report.json",
+        "ux-report.json",
+        "db-report.json",
+        "perf-report.json",
+        "data-report.json",
+        "delivery-report.json",
+    }
+    hashes: dict[str, str] = {}
+    for name in sorted(names):
+        path = task_dir / name
+        if path.is_file():
+            hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    for path in sorted(task_dir.glob("consultation-*.json")):
+        hashes[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return hashes
+
+
+def git_head_for_repo() -> str | None:
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return (result.stdout or "").strip() or None
+
+
+def write_validate_log(task_dir: Path, stage: str, report: Report) -> Path | None:
+    """Write tasks/<id>/logs/validate-<uuid>.json for a stage run. Best-effort; never fails the gate."""
+    if not task_dir.is_dir():
+        return None
+    log_dir = task_dir / "logs"
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return None
+    log_uuid = str(uuid.uuid4())
+    payload = {
+        "uuid": log_uuid,
+        "task_id": task_dir.name,
+        "stage": stage,
+        "exit_code": 1 if report.errors else 0,
+        "error_count": len(report.errors),
+        "warning_count": len(report.warnings),
+        "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "git_head": git_head_for_repo(),
+        "artifacts": task_artifact_hashes(task_dir),
+    }
+    path = log_dir / f"validate-{log_uuid}.json"
+    try:
+        path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        try:
+            # Best-effort read-only on POSIX. On Windows chmod often blocks later cleanup in tests.
+            if os.name != "nt":
+                path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+        except OSError:
+            pass
+        return path
+    except OSError:
+        return None
+
+
+def load_validate_logs(task_dir: Path) -> list[dict]:
+    log_dir = task_dir / "logs"
+    if not log_dir.is_dir():
+        return []
+    logs: list[dict] = []
+    for path in sorted(log_dir.glob("validate-*.json")):
+        try:
+            data = load_json(path)
+        except (json.JSONDecodeError, OSError):
+            continue
+        if isinstance(data, dict):
+            data = dict(data)
+            data["_path"] = path.name
+            logs.append(data)
+    return logs
+
+
+def log_hashes_match(log: dict, current: dict[str, str], ignore_keys: set[str] | None = None) -> bool:
+    """True when every artifact hash recorded in the log still matches the file on disk.
+
+    `ignore_keys` skips named artifacts (QA cites an earlier-stage log, then updates
+    qa-report.json to include the uuid — that file's hash must not invalidate the citation).
+    """
+    recorded = log.get("artifacts")
+    if not isinstance(recorded, dict) or not recorded:
+        return False
+    skip = ignore_keys or set()
+    for name, digest in recorded.items():
+        if name in skip:
+            continue
+        if current.get(name) != digest:
+            return False
+    return True
+
+
+def check_validate_log_citations(qa: dict, task_dir: Path, problems: Report) -> None:
+    """C4: a QA PASS must cite at least one successful validate log by uuid."""
+    if qa.get("verdict") != "PASS":
+        return
+    ids = qa.get("validate_log_ids")
+    if not isinstance(ids, list) or not ids:
+        problems.error(
+            "qa_missing_validate_log",
+            "verdict is PASS but validate_log_ids is missing or empty. Cite the uuid of a "
+            "validate.py log under tasks/<TASK-ID>/logs/ (prefer an earlier stage such as "
+            "duplicate_check or implementation; then re-run validate --stage qa).",
+            "qa-report.json",
+        )
+        return
+    by_uuid = {log.get("uuid"): log for log in load_validate_logs(task_dir) if log.get("uuid")}
+    current = task_artifact_hashes(task_dir)
+    for log_id in ids:
+        log = by_uuid.get(log_id)
+        if not isinstance(log, dict):
+            problems.error(
+                "qa_validate_log_unknown",
+                f"validate_log_ids cites unknown uuid {log_id!r}; no matching file under logs/",
+                "qa-report.json",
+            )
+            continue
+        if log.get("exit_code") != 0:
+            problems.error(
+                "qa_validate_log_failed",
+                f"validate log {log_id} has exit_code={log.get('exit_code')}; cite a passing run",
+                "qa-report.json",
+            )
+            continue
+        # Ignore qa-report.json: the report is updated to cite the log after the log was written.
+        if not log_hashes_match(log, current, ignore_keys={"qa-report.json"}):
+            problems.error(
+                "qa_validate_log_stale",
+                f"validate log {log_id} no longer matches artifact hashes on disk; re-run validate",
+                "qa-report.json",
+            )
+
+
+def check_validate_logs_for_completion(task_dir: Path, stages: list[str], problems: Report) -> None:
+    """C4: completion requires a fresh exit_code 0 log for each prior applicable stage."""
+    logs = load_validate_logs(task_dir)
+    current = task_artifact_hashes(task_dir)
+    needed = [s for s in stages if s != "completion" and s in _STAGE_PRIMARY_ARTIFACT]
+    for stage in needed:
+        primary = _STAGE_PRIMARY_ARTIFACT[stage]
+        if not (task_dir / primary).is_file():
+            continue
+        matching = []
+        for log in logs:
+            if log.get("stage") != stage or log.get("exit_code") != 0:
+                continue
+            recorded = log.get("artifacts") if isinstance(log.get("artifacts"), dict) else {}
+            # Freshness is judged on the stage's primary artifact only. Logs also snapshot
+            # sibling files; later stages may rewrite those without invalidating this stage.
+            if recorded.get(primary) == current.get(primary):
+                matching.append(log)
+        if not matching:
+            problems.error(
+                "validate_log_missing",
+                f"no fresh validate log for stage '{stage}' (exit_code 0, hashes match). "
+                f"Run: python .agent/tools/validate.py --task {task_dir.name} --stage {stage}",
+                f"logs/",
+            )
+
 
 def stage_plan(task_dir: Path, problems: Report) -> None:
     plan_path = task_dir / "plan.json"
@@ -1498,6 +1928,15 @@ def stage_plan(task_dir: Path, problems: Report) -> None:
 
 
 def stage_implementation(task_dir: Path, problems: Report) -> None:
+    intake_path = task_dir / "intake.json"
+    if intake_path.exists():
+        try:
+            intake = load_json(intake_path)
+        except (json.JSONDecodeError, OSError):
+            intake = {}
+        if isinstance(intake, dict):
+            check_trivial_classification_gate(intake, problems)
+            check_model_assignments(intake, problems)
     plan_path = task_dir / "plan.json"
     worker_path = task_dir / "worker-result.json"
     if not plan_path.exists():
@@ -1511,16 +1950,27 @@ def stage_implementation(task_dir: Path, problems: Report) -> None:
 
 
 def stage_qa(task_dir: Path, problems: Report) -> None:
+    intake_path = task_dir / "intake.json"
+    if intake_path.exists():
+        try:
+            intake = load_json(intake_path)
+        except (json.JSONDecodeError, OSError):
+            intake = {}
+        if isinstance(intake, dict):
+            check_trivial_classification_gate(intake, problems)
+            check_model_assignments(intake, problems)
     qa_path = task_dir / "qa-report.json"
     if not qa_path.exists():
         problems.error("qa_report_exists", "qa-report.json is missing; verification has not run", str(task_dir.name))
         return
     qa = load_json(qa_path)
+    if isinstance(qa, dict):
+        check_validate_log_citations(qa, task_dir, problems)
     requirements_path = task_dir / "requirements.json"
     if requirements_path.exists():
         check_qa_covers_requirements(qa, load_json(requirements_path), problems)
     # Phase gating: a critical failure must not be reported alongside a PASS.
-    if qa.get("verdict") == "PASS":
+    if isinstance(qa, dict) and qa.get("verdict") == "PASS":
         failed = [c for c in (qa.get("criteria") or []) if isinstance(c, dict) and c.get("verdict") == "FAIL"]
         if failed:
             problems.error(
@@ -1630,6 +2080,7 @@ def stage_completion(task_dir: Path, problems: Report) -> None:
         )
 
     check_gate_presence(task_dir, gates, problems)
+    check_validate_logs_for_completion(task_dir, applicable_stages(task_dir), problems)
     problems.note(f"required gates: {gates} (complexity={complexity}, risk={risk})")
 
 
@@ -1876,10 +2327,128 @@ def check_setup(problems: Report) -> None:
             ".cursor/rules/",
         )
 
+    check_project_baseline(problems)
+    check_models_catalog(problems)
+    check_seeded_from(problems)
+
     problems.note(f"{len(agent_files)} agent definitions, {len(declared_roles)} roles declared in config, "
                   f"{len(rule_names)} rules")
 
     check_portability(problems)
+
+
+_BASELINE_STATUSES = frozenset({"template", "established", "framework_meta"})
+
+
+def check_seeded_from(problems: Report) -> None:
+    """Product repos should record how they were seeded; the framework repo itself need not."""
+    baseline_path = REPO_ROOT / ".agent" / "project-baseline.yaml"
+    status = None
+    if baseline_path.is_file():
+        try:
+            data = parse_yaml(baseline_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                status = data.get("status")
+        except Exception:  # noqa: BLE001
+            status = None
+    if status == "framework_meta":
+        manifest = REPO_ROOT / ".agent" / "framework-manifest.yaml"
+        if not manifest.is_file():
+            problems.error(
+                "framework_manifest_missing",
+                "this repository is framework_meta but .agent/framework-manifest.yaml is missing",
+                ".agent/framework-manifest.yaml",
+            )
+        else:
+            problems.note("framework manifest present (this repository is the agent framework)")
+        return
+
+    seeded = REPO_ROOT / ".agent" / "seeded-from.yaml"
+    rel = ".agent/seeded-from.yaml"
+    if not seeded.is_file():
+        problems.warn(
+            "seeded_from_missing",
+            "no .agent/seeded-from.yaml — project may predate seed_framework, or was copied by hand. "
+            "Re-seed or run upgrade from a framework checkout to record release metadata.",
+            rel,
+        )
+        return
+    try:
+        data = parse_yaml(seeded.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        problems.error("seeded_from_parse", f"cannot parse seeded-from: {exc}", rel)
+        return
+    if not isinstance(data, dict) or not data.get("release"):
+        problems.warn("seeded_from_incomplete", "seeded-from.yaml missing release field", rel)
+    else:
+        problems.note(f"seeded-from release={data.get('release')!r} op={data.get('last_operation')!r}")
+
+
+def check_project_baseline(problems: Report) -> None:
+    """Require a structured project baseline (C6). Markdown project-memory is summary only."""
+    path = REPO_ROOT / ".agent" / "project-baseline.yaml"
+    rel = ".agent/project-baseline.yaml"
+    if not path.is_file():
+        problems.error(
+            "project_baseline_missing",
+            "missing .agent/project-baseline.yaml. Product stack and authoritative commands belong "
+            "in this structured baseline (filled by human + product + tech-lead at project-level "
+            "spec/design), not in a hand-written markdown ceremony. Copy "
+            ".agent/templates/project-baseline.yaml to start.",
+            rel,
+        )
+        return
+    try:
+        data = parse_yaml(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 — surface parse failures as setup errors
+        problems.error("project_baseline_parse", f"cannot parse project baseline: {exc}", rel)
+        return
+    if not isinstance(data, dict):
+        problems.error("project_baseline_shape", "project baseline must be a mapping", rel)
+        return
+    status = data.get("status")
+    if status not in _BASELINE_STATUSES:
+        problems.error(
+            "project_baseline_status",
+            f"status must be one of {sorted(_BASELINE_STATUSES)}, got {status!r}",
+            rel,
+        )
+        return
+    if status == "template":
+        problems.warn(
+            "project_baseline_unfilled",
+            "project baseline status is template. Before product implementation, run a project-level "
+            "spec/design with human + product + tech-lead and set status to established.",
+            rel,
+        )
+        return
+    if status == "framework_meta":
+        problems.note("project baseline: framework_meta (this repository is the agent framework)")
+        return
+    # established — require the fields environment gates need
+    stack = data.get("stack") if isinstance(data.get("stack"), dict) else {}
+    commands = data.get("commands") if isinstance(data.get("commands"), dict) else {}
+    for key in ("language", "runtime", "environment_manager"):
+        if not stack.get(key):
+            problems.error(
+                "project_baseline_incomplete",
+                f"established baseline missing stack.{key}",
+                rel,
+            )
+    for key in ("test",):
+        if not commands.get(key):
+            problems.error(
+                "project_baseline_incomplete",
+                f"established baseline missing commands.{key}",
+                rel,
+            )
+    decided = data.get("decided_by") if isinstance(data.get("decided_by"), dict) else {}
+    if decided.get("human") is not True:
+        problems.error(
+            "project_baseline_unapproved",
+            "established baseline must record decided_by.human: true",
+            rel,
+        )
 
 
 # Machine-specific absolute paths. Deliberately narrow, so documented API routes such as
@@ -1891,105 +2460,40 @@ _MACHINE_PATH_PATTERNS = [
     (re.compile(r"\bC:/"), "a Windows drive path"),
 ]
 
-# The framework addresses paths relative to a root it discovers from its own file location, so
-# none of these may appear. `Refer Doc/` is exempt: it holds audits of other repositories, which
-# legitimately quote those projects' paths.
-_PORTABILITY_EXEMPT_PREFIXES = ("Refer Doc/",)
+# Portability scans *framework source*, not run records. Task artifacts under `tasks/` are a run's
+# evidence and will name real interpreters; scanning them puts "report what you ran" and "stay
+# portable" in conflict. `refers/` quotes other repos' paths by design.
+_PORTABILITY_EXEMPT_PREFIXES = (
+    "tasks/",
+    "refers/",
+    ".rgents/",
+    ".agent/.selftest",
+)
 
-# A record may name the machine it was made on. `worker-result.json` is the case that forced this:
-# build.md and the artifact schema both require it to report the EXACT commands that were run and
-# the runtime actually used, and on this project the confirmed test command is an interpreter path.
-# Refusing the drive letter there puts two rules in direct conflict — report what you really ran, or
-# stay portable — and the artifact cannot satisfy both. The exemption is therefore keyed, not
-# file-level: a path is allowed under these keys and nowhere else, so a drive letter that leaks into
-# `design.json -> architecture` is still an error. Only the KEY is trusted here; the value is not
-# inspected at all, because deciding which keys may carry machine paths is the whole decision.
-_PORTABILITY_EXEMPT_KEYS = frozenset({
-    # worker-result.json -> environment:
-    "runtime",
-    "command",
-    "baseline_state",
-    # Fields whose purpose is to cite what was actually run or measured, or to explain a finding
-    # by naming the runtime and the commands used. This list was extended twice by real artifacts
-    # before the pattern was named: a machine path lands wherever an artifact quotes a command it
-    # ran, and the field name drifts with the artifact (`evidence`, `rollback_evidence`,
-    # `plan_evidence`, `description`, `command`, `baseline_state`). Enumerating one name at a time
-    # meant waiting for the next name to appear; this is the class, stated once.
-    "evidence",
-    "rationale",
-    "description",
-    "detail",
-    "notes",
-})
-
-# An evidence field names the machine the measurement was taken on. Matched by suffix rather than by
-# enumerating names, because the same field appears as `evidence`, `rollback_evidence`,
-# `plan_evidence` and would otherwise be treated inconsistently: with a name list, `plan_evidence`
-# is exempt only for as long as no evidence string happens to contain a path.
-_PORTABILITY_EXEMPT_KEY_SUFFIXES = ("_evidence",)
-
-# `"command":` is a key; a line inside `commands_confirmed` is a bare array element with no key to
-# match. The container is the exemption, so it is tracked by path rather than by key name:
-# `environment.commands_confirmed[2]` is a machine path, `environment.not_reviewed[0].reason` is not.
-_PORTABILITY_EXEMPT_PATHS = frozenset({
-    "environment/commands_confirmed",
-    "environment/services_running",
-    "commands_confirmed",
-})
-
-# A key: value line, e.g. `"runtime": ...` or `  "baseline_state": ...`.
-_PORTABILITY_KEY_LINE = re.compile(r'^\s*"([A-Za-z_][A-Za-z0-9_]*)"\s*:')
-
-# A container opener, e.g. `"environment": {`, `"commands_confirmed": [`. The capture is the key.
-_PORTABILITY_CONTAINER_LINE = re.compile(r'^\s*"([A-Za-z_][A-Za-z0-9_]*)"\s*:\s*[\[{]\s*$')
-
-# What a line inside a command container has to look like before the container exemption applies.
-# This keeps the exemption tight: a verbose `not_run_reason` that happens to sit inside the same
-# array is still scanned, so the exemption cannot be widened by putting prose next to a command.
-_PORTABILITY_COMMAND_LINE = re.compile(r"^[^=]{0,40}=\s|\bpython3?(\.exe)?\b|\bpytest\b|\bnpm\b")
+# Only these surfaces are framework code for this check. Everything else (README, product src, …)
+# is out of scope for the portability rule.
+_PORTABILITY_SCAN_PREFIXES = (
+    ".agent/",
+    ".cursor/",
+    "docs/agents/",
+    "docs/architecture/",
+)
 
 
-def portability_path_exempt(context_path: str) -> bool:
-    """True when this JSON path's values may name a machine."""
-    return context_path in _PORTABILITY_EXEMPT_PATHS
-
-
-def portability_exempt_line(line: str, context_path: str = "") -> bool:
-    """True when this line assigns a value that may legitimately name a machine.
-
-    Two ways in, both narrow:
-
-      * a known key — `worker-result.json` is required by build.md and its schema to report the
-        runtime actually used and the exact commands actually run, and on this project the confirmed
-        test command is an interpreter path. Refusing the drive letter there puts "report what you
-        really ran" and "stay portable" in direct conflict, and the artifact cannot satisfy both.
-      * a line inside a known command container that looks like a command — the entries of
-        `environment.commands_confirmed` have no keys to match, and naming a machine is the field's
-        entire purpose.
-
-    Everything else is still an error, including a drive letter in prose such as
-    `not_reviewed[].reason`, so the exemption cannot be widened by accident.
-    """
-    if portability_path_exempt(context_path) and _PORTABILITY_COMMAND_LINE.search(line):
-        return True
-    match = _PORTABILITY_KEY_LINE.match(line)
-    if not match:
+def _portability_rel_is_scanned(rel: str) -> bool:
+    if any(rel == p.rstrip("/") or rel.startswith(p) for p in _PORTABILITY_EXEMPT_PREFIXES):
         return False
-    key = match.group(1)
-    return key in _PORTABILITY_EXEMPT_KEYS or key.endswith(_PORTABILITY_EXEMPT_KEY_SUFFIXES)
-
-
+    if any(rel == p.rstrip("/") or rel.startswith(p) for p in _PORTABILITY_SCAN_PREFIXES):
+        return True
+    return rel in ("AGENTS.md",)
 
 
 def _portability_scan_files() -> list[Path]:
-    """Files the portability scan inspects: the framework, minus the selftest region.
+    """Framework files the portability scan inspects (not task run records).
 
-    `run_selftest` deliberately constructs the inputs that violate these rules — that is what a
-    negative test is. Scanning it would make the check fail on its own canaries, and a check that
-    cannot pass its own selftest gets disabled, which is worse than not having it.
-
-    The region is delimited by paths rather than spans: anything under `run_selftest` is test
-    apparatus, and `validate.py` itself is scanned only up to where `run_selftest` begins.
+    `run_selftest` builds known-bad inputs under a scratch tree; those trees are scanned when
+    REPO_ROOT is pointed at them. The selftest region inside validate.py itself is stripped so
+    canary strings do not fail the live repository check.
     """
     scan_suffixes = (".py", ".yaml", ".yml", ".json")
     files: list[Path] = []
@@ -1997,11 +2501,9 @@ def _portability_scan_files() -> list[Path]:
         if not path.is_file():
             continue
         rel = path.relative_to(REPO_ROOT).as_posix()
-        if rel.startswith(_PORTABILITY_EXEMPT_PREFIXES):
+        if path.suffix not in scan_suffixes and path.name != "AGENTS.md":
             continue
-        if path.suffix not in scan_suffixes:
-            continue
-        if rel.startswith(".agent/.selftest"):
+        if not _portability_rel_is_scanned(rel):
             continue
         files.append(path)
     return files
@@ -2035,24 +2537,9 @@ def check_portability(problems: Report) -> None:
             text = _strip_selftest_region(path, path.read_text(encoding="utf-8"))
         except (UnicodeDecodeError, OSError):
             continue
-        path_stack: list[str] = []
         for number, line in enumerate(text.splitlines(), 1):
             if path.suffix in (".py", ".yaml", ".yml") and line.lstrip().startswith("#"):
                 continue
-            stripped = line.strip()
-            # Track this line's JSON path so a container can be exempt without exempting every key
-            # name inside it. Cheap and line-based on purpose: it only has to be right for the flat
-            # key/array layout that json.dumps produces, which is what every artifact uses.
-            container = _PORTABILITY_CONTAINER_LINE.match(line)
-            if stripped[:1] in ("]", "}"):
-                if path_stack:
-                    path_stack.pop()
-            if portability_exempt_line(line, "/".join(path_stack)):
-                if container:
-                    path_stack.append(container.group(1))
-                continue
-            if container:
-                path_stack.append(container.group(1))
             for pattern, description in _MACHINE_PATH_PATTERNS:
                 if pattern.search(line):
                     findings += 1
@@ -2170,6 +2657,91 @@ def run_selftest() -> int:
     check_plan(good_plan, report)
     canary("a consistent plan passes with no errors", not report.errors,
            str([p.message for p in report.errors]))
+
+    # 2b. parallel_groups claimed_paths must be disjoint (C2) --------------------------------
+    overlap_plan = {
+        "task_id": "TASK-001",
+        "affected_files": ["src/a.ts", "src/b.ts"],
+        "steps": [
+            {"order": 1, "action": "modify", "file": "src/a.ts", "description": "change a",
+             "parallel_group": "g1"},
+            {"order": 2, "action": "modify", "file": "src/b.ts", "description": "change b",
+             "parallel_group": "g1"},
+        ],
+        "acceptance_mapping": {"AC-1": "step 1"},
+        "parallel_groups": [
+            {
+                "group": "g1",
+                "steps": [1, 2],
+                "streams": [
+                    {"step": 1, "claimed_paths": ["src/a.ts", "src/shared.ts"]},
+                    {"step": 2, "claimed_paths": ["src/b.ts", "src/shared.ts"]},
+                ],
+            }
+        ],
+    }
+    report = Report("canary")
+    check_plan(overlap_plan, report)
+    ok_parallel = {
+        "task_id": "TASK-001",
+        "affected_files": ["src/a.ts", "src/b.ts"],
+        "steps": [
+            {"order": 1, "action": "modify", "file": "src/a.ts", "description": "change a"},
+            {"order": 2, "action": "modify", "file": "src/b.ts", "description": "change b"},
+        ],
+        "acceptance_mapping": {"AC-1": "step 1"},
+        "parallel_groups": [
+            {
+                "group": "g1",
+                "steps": [1, 2],
+                "streams": [
+                    {"step": 1, "claimed_paths": ["src/a.ts"]},
+                    {"step": 2, "claimed_paths": ["src/b.ts"]},
+                ],
+            }
+        ],
+    }
+    report_ok = Report("canary")
+    check_plan(ok_parallel, report_ok)
+    canary(
+        "intersecting parallel claimed_paths are rejected; disjoint streams pass",
+        any(p.check == "parallel_claimed_paths" for p in report.errors) and not report_ok.errors,
+        f"bad={sorted({p.check for p in report.errors})} good={sorted({p.check for p in report_ok.errors})}",
+    )
+
+    # 2c. path lease acquire/release against a scratch task (C2) -----------------------------
+    tools_dir = Path(__file__).resolve().parent
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    import parallel_worktree as pwt  # noqa: WPS433
+
+    lock_scratch = REPO_ROOT / ".agent" / ".selftest-parallel" / "TASK-910"
+    lock_scratch.mkdir(parents=True, exist_ok=True)
+    (lock_scratch / "plan.json").write_text(
+        json.dumps(ok_parallel) + "\n",
+        encoding="utf-8",
+    )
+    # Point the tool at this scratch without polluting real tasks/ — use --task-dir.
+    acquired = pwt.acquire_paths("TASK-910", 1, ["src/a.ts"], ttl_hours=1, task_dir=lock_scratch)
+    conflict = None
+    try:
+        pwt.acquire_paths("TASK-911", 1, ["src/a.ts"], ttl_hours=1, task_dir=lock_scratch)
+    except SystemExit as exc:
+        conflict = str(exc)
+    released = pwt.release_paths("TASK-910", 1, task_dir=lock_scratch)
+    canary(
+        "path lease blocks a second holder on the same path, then releases cleanly",
+        bool(acquired.get("paths")) and conflict is not None and "already leased" in conflict and released >= 1,
+        f"acquired={acquired} conflict={conflict!r} released={released}",
+    )
+    for stale in sorted(lock_scratch.rglob("*"), reverse=True):
+        try:
+            if stale.is_file():
+                stale.unlink()
+            else:
+                stale.rmdir()
+        except OSError:
+            pass
 
     # 3. an irreversible or high-risk step must carry a rollback ----------------------------
     report = Report("canary")
@@ -2648,8 +3220,10 @@ def run_selftest() -> int:
         globals()["REPO_ROOT"] = original_root
 
     # The portability scan, run over a scratch tree so it is a real assertion rather than a
-    # reliance on the repository currently being clean.
-    planted = portability_scratch / "config.yaml"
+    # reliance on the repository currently being clean. Framework surfaces only: plant under
+    # `.agent/`; run records under `tasks/` must not be scanned.
+    (portability_scratch / ".agent").mkdir(parents=True, exist_ok=True)
+    planted = portability_scratch / ".agent" / "config.yaml"
     planted.write_text("root: " + chr(34) + "H:" + chr(92) * 2 + "work" + chr(92) * 2
                        + "project" + chr(92) * 2 + "src" + chr(34) + "\n", encoding="utf-8")
     original_root = globals()["REPO_ROOT"]
@@ -2663,22 +3237,24 @@ def run_selftest() -> int:
            any(p.check == "machine_specific_path" for p in scan_report.errors),
            f"checks={sorted({p.check for p in scan_report.errors})}")
 
-    # A record may name the machine it was made on, under a known key and nowhere else. The
-    # positive half proves the exemption is wired into the scan (not merely available as a helper);
-    # the negative half proves it cannot be widened by accident.
+    # Run records under tasks/ may name the machine; that is their job. A path there must not
+    # trip the framework portability rule.
     for stale in sorted(portability_scratch.rglob("*"), reverse=True):
         if stale.is_file():
             stale.unlink()
-    record = portability_scratch / "record.json"
-    record.write_text(
+    task_record = portability_scratch / "tasks" / "active" / "TASK-001"
+    task_record.mkdir(parents=True, exist_ok=True)
+    (task_record / "worker-result.json").write_text(
         "{\n"
         '  "command": "E:' + chr(92) * 2 + 'Conda' + chr(92) * 2 + 'envs' + chr(92) * 2
         + 'vi' + chr(92) * 2 + 'python.exe -m pytest -q",\n'
-        '  "note": "run from E:' + chr(92) * 2 + 'Conda' + chr(92) * 2 + 'envs' + chr(92) * 2
-        + 'vi"\n'
+        '  "note": "run from E:' + chr(92) * 2 + 'Conda' + chr(92) * 2 + 'envs"\n'
         "}\n",
         encoding="utf-8",
     )
+    # Also plant a framework file that is clean, so the scan still has something to walk.
+    (portability_scratch / ".agent").mkdir(parents=True, exist_ok=True)
+    (portability_scratch / ".agent" / "config.yaml").write_text("version: 1\n", encoding="utf-8")
     scan_report = Report("canary")
     try:
         globals()["REPO_ROOT"] = portability_scratch
@@ -2686,9 +3262,8 @@ def run_selftest() -> int:
     finally:
         globals()["REPO_ROOT"] = original_root
     flagged = [p for p in scan_report.errors if p.check == "machine_specific_path"]
-    canary("a machine path under a known environment key is exempt, and one under any other key "
-           "is still an error",
-           len(flagged) == 1 and '"note"' in flagged[0].message,
+    canary("a machine path under tasks/ is not a portability error",
+           len(flagged) == 0,
            f"flagged={[p.message.split('Offending text: ')[-1] for p in flagged]}")
 
     for stale in sorted(portability_scratch.rglob("*"), reverse=True):
@@ -2763,7 +3338,157 @@ def run_selftest() -> int:
     except OSError:
         pass
 
-    # 23. the repository's own setup must be self-consistent ----------------------------------------
+    # 23. trivial classification requires human confirmation (C3) ---------------------------------
+    report = Report("canary")
+    check_trivial_classification_gate({"complexity": "trivial"}, report)
+    report_ok = Report("canary")
+    check_trivial_classification_gate(
+        {"complexity": "trivial", "classification_confirmation": {"decided_by": "human"}},
+        report_ok,
+    )
+    canary(
+        "trivial without human confirmation is rejected; with decided_by human it passes",
+        any(p.check == "trivial_needs_human" for p in report.errors) and not report_ok.errors,
+        f"bad={[p.check for p in report.errors]} good={[p.check for p in report_ok.errors]}",
+    )
+
+    # 23b. model_assignments triangle (C1) ---------------------------------------------------------
+    catalog_stub = {
+        "models": [
+            {"id": "m-a", "ide_slug": "m-a"},
+            {"id": "m-b", "ide_slug": "m-b"},
+            {"id": "m-c", "ide_slug": "m-c"},
+        ]
+    }
+    missing_assign = Report("canary")
+    check_model_assignments(
+        {
+            "complexity": "standard",
+            "activated_specialists": ["security"],
+            "blocking_gates": ["qa", "security", "review"],
+        },
+        missing_assign,
+        catalog=catalog_stub,
+    )
+    same_model = Report("canary")
+    check_model_assignments(
+        {
+            "complexity": "standard",
+            "activated_specialists": ["security"],
+            "blocking_gates": ["qa", "security", "review"],
+            "model_assignments": {
+                "qa": {"assigned_model": "m-a"},
+                "reviewer": {"assigned_model": "m-a"},
+                "security": {"assigned_model": "m-b"},
+            },
+        },
+        same_model,
+        catalog=catalog_stub,
+    )
+    distinct_ok = Report("canary")
+    check_model_assignments(
+        {
+            "complexity": "standard",
+            "activated_specialists": ["security"],
+            "blocking_gates": ["qa", "security", "review"],
+            "model_assignments": {
+                "qa": {"assigned_model": "m-a"},
+                "reviewer": {"assigned_model": "m-b"},
+                "security": {"assigned_model": "m-c"},
+                "developer": {"assigned_model": "m-a"},
+            },
+        },
+        distinct_ok,
+        catalog=catalog_stub,
+    )
+    canary(
+        "model_assignments required; triangle must be distinct; soft warn when developer overlaps",
+        any(p.check == "model_assignments_required" for p in missing_assign.errors)
+        and any(p.check == "model_triangle_not_distinct" for p in same_model.errors)
+        and not distinct_ok.errors
+        and any(p.check == "model_developer_overlaps_triangle" for p in distinct_ok.warnings),
+        f"missing={sorted({p.check for p in missing_assign.errors})} "
+        f"same={sorted({p.check for p in same_model.errors})} "
+        f"ok_err={sorted({p.check for p in distinct_ok.errors})} "
+        f"ok_warn={sorted({p.check for p in distinct_ok.warnings})}",
+    )
+
+    # 24. QA PASS must cite a validate log; completion needs fresh stage logs (C4) ----------------
+    log_scratch = REPO_ROOT / ".agent" / ".selftest-validate-log" / f"TASK-{uuid.uuid4().hex[:8]}"
+    log_scratch.mkdir(parents=True, exist_ok=True)
+    (log_scratch / "intake.json").write_text('{"task_id":"TASK-900"}\n', encoding="utf-8")
+    qa_body = {
+        "task_id": "TASK-900",
+        "verdict": "PASS",
+        "criteria": [{"criterion_id": "AC-1", "verdict": "PASS", "evidence": "ran it"}],
+        "findings": [],
+        "tests": {"commands_run": [{"command": "true", "result": "pass"}]},
+    }
+    (log_scratch / "qa-report.json").write_text(json.dumps(qa_body) + "\n", encoding="utf-8")
+    report = Report("canary")
+    check_validate_log_citations(qa_body, log_scratch, report)
+    canary(
+        "a QA PASS without validate_log_ids is rejected",
+        any(p.check == "qa_missing_validate_log" for p in report.errors),
+        f"checks={sorted({p.check for p in report.errors})}",
+    )
+    # Cite an earlier-stage log (duplicate_check), then update qa-report — qa-report hash is ignored.
+    dup_log = write_validate_log(log_scratch, "duplicate_check", Report("canary"))
+    assert dup_log is not None
+    dup_uuid = load_json(dup_log)["uuid"]
+    qa_body["validate_log_ids"] = [dup_uuid]
+    (log_scratch / "qa-report.json").write_text(json.dumps(qa_body) + "\n", encoding="utf-8")
+    report = Report("canary")
+    check_validate_log_citations(qa_body, log_scratch, report)
+    canary(
+        "a QA PASS that cites a fresh earlier-stage validate log is accepted",
+        not report.errors,
+        "; ".join(p.message for p in report.errors[:3]),
+    )
+    missing = Report("canary")
+    check_validate_logs_for_completion(log_scratch, ["duplicate_check", "qa", "completion"], missing)
+    canary(
+        "completion without a fresh qa-stage validate log is rejected",
+        any(p.check == "validate_log_missing" for p in missing.errors),
+        f"checks={sorted({p.check for p in missing.errors})}",
+    )
+    write_validate_log(log_scratch, "qa", Report("canary"))
+    ok_completion = Report("canary")
+    check_validate_logs_for_completion(log_scratch, ["duplicate_check", "qa", "completion"], ok_completion)
+    canary(
+        "completion with fresh duplicate_check and qa logs passes the log gate",
+        not any(p.check == "validate_log_missing" for p in ok_completion.errors),
+        "; ".join(p.message for p in ok_completion.errors[:3]),
+    )
+    # Best-effort cleanup; leave leftovers if the OS locks a file.
+    for stale in sorted(log_scratch.rglob("*"), reverse=True):
+        try:
+            if stale.is_file():
+                stale.chmod(stat.S_IWRITE | stat.S_IREAD)
+                stale.unlink()
+            else:
+                stale.rmdir()
+        except OSError:
+            pass
+
+    # 24b. ci-changed path → active task id extraction --------------------------------------------
+    extracted = active_task_ids_from_paths(
+        [
+            "tasks/active/TASK-010/intake.json",
+            "tasks/active/TASK-010/plan.json",
+            "tasks/completed/TASK-002/qa-report.json",
+            "tasks/archive/TASK-003/intake.json",
+            "README.md",
+            "tasks/active/TASK-011/worker-result.json",
+        ]
+    )
+    canary(
+        "ci-changed extracts unique active TASK ids and ignores completed/archive",
+        extracted == ["TASK-010", "TASK-011"],
+        f"got {extracted}",
+    )
+
+    # 25. the repository's own setup must be self-consistent ----------------------------------------
     report = Report("canary")
     check_setup(report)
     canary(f"repository setup is self-consistent ({len(report.warnings)} warning(s))",
@@ -2806,6 +3531,89 @@ def resolve_artifact_path(raw: str) -> Path:
     return path.resolve() if path.is_absolute() else (REPO_ROOT / path).resolve()
 
 
+_ACTIVE_TASK_PATH = re.compile(r"^tasks/active/(TASK-\d+)(?:/|$)")
+
+
+def active_task_ids_from_paths(paths: list[str]) -> list[str]:
+    """Return unique TASK-IDs under tasks/active/ mentioned by the given repo-relative paths."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for raw in paths:
+        normalized = raw.replace("\\", "/").lstrip("./")
+        match = _ACTIVE_TASK_PATH.match(normalized)
+        if not match:
+            continue
+        task_id = match.group(1)
+        if task_id not in seen:
+            seen.add(task_id)
+            found.append(task_id)
+    return found
+
+
+def git_diff_name_only(base_ref: str) -> tuple[list[str] | None, str | None]:
+    """Return paths changed between base_ref and HEAD, or (None, reason) on failure."""
+    if not base_ref or re.fullmatch(r"0+", base_ref):
+        return None, "base ref is empty or an all-zero SHA (nothing to diff against)"
+    result = subprocess.run(
+        ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", base_ref, "HEAD"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        return None, f"git diff failed against {base_ref!r}: {detail}"
+    paths = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+    return paths, None
+
+
+def run_ci_changed(base_ref: str) -> int:
+    """CI job C: shape-check every active task touched since base_ref (``--all`` per task).
+
+    Does not re-run product tests. Trusts developer/QA reports; only enforces artifact invariants.
+    """
+    print(f"== ci-changed (base={base_ref})")
+    paths, err = git_diff_name_only(base_ref)
+    if err:
+        print(f"ERROR: {err}", file=sys.stderr)
+        return 2
+    assert paths is not None
+    task_ids = active_task_ids_from_paths(paths)
+    if not task_ids:
+        print("   no tasks/active/TASK-* paths changed; skip")
+        return 0
+    print(f"   changed active tasks: {', '.join(task_ids)}")
+    exit_code = 0
+    for task_id in task_ids:
+        task_dir = REPO_ROOT / "tasks" / "active" / task_id
+        if not task_dir.is_dir():
+            print(
+                f"ERROR: changed path names {task_id} but directory missing: {task_dir}",
+                file=sys.stderr,
+            )
+            exit_code = max(exit_code, 1)
+            continue
+        stages = applicable_stages(task_dir)
+        print(f"   applicable stages for {task_id}: {stages}")
+        for stage in stages:
+            report = Report(f"task {task_id} :: stage {stage}")
+            STAGE_CHECKERS[stage](task_dir, report)
+            log_path = write_validate_log(task_dir, stage, report)
+            if log_path is not None:
+                report.note(f"validate log: {log_path.relative_to(REPO_ROOT).as_posix()}")
+            exit_code = max(exit_code, report.emit())
+    return exit_code
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Rgents artifact validator, gate invariant checker, and setup linter.",
@@ -2818,10 +3626,23 @@ def main() -> int:
     parser.add_argument("--all", action="store_true", help="run every stage check for the task")
     parser.add_argument("--check-setup", action="store_true", help="lint the repository's team configuration")
     parser.add_argument("--selftest", action="store_true", help="prove the invariants fire on known-bad input")
+    parser.add_argument(
+        "--ci-changed",
+        action="store_true",
+        help="CI: run --all on each tasks/active/TASK-* touched since --base (shape only; no product tests)",
+    )
+    parser.add_argument(
+        "--base",
+        default="origin/main",
+        help="git ref for --ci-changed (default: origin/main). Use the PR base or previous push SHA in CI.",
+    )
     args = parser.parse_args()
 
     if args.selftest:
         return run_selftest()
+
+    if args.ci_changed:
+        return run_ci_changed(args.base)
 
     exit_code = 0
 
@@ -2853,9 +3674,12 @@ def main() -> int:
         for stage in stages:
             report = Report(f"task {task_dir.name} :: stage {stage}")
             STAGE_CHECKERS[stage](task_dir, report)
+            log_path = write_validate_log(task_dir, stage, report)
+            if log_path is not None:
+                report.note(f"validate log: {log_path.relative_to(REPO_ROOT).as_posix()}")
             exit_code = max(exit_code, report.emit())
 
-    if not any([args.artifact, args.check_setup, args.task, args.task_dir, args.all]):
+    if not any([args.artifact, args.check_setup, args.task, args.task_dir, args.all, args.ci_changed]):
         parser.print_help()
         return 0
 

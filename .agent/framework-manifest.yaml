@@ -1,0 +1,69 @@
+# Rgents framework packaging contract (create + upgrade).
+# Products receive a copy as reference; upgrades are driven from a framework checkout
+# via `.agent/tools/seed_framework.py`, not from inside the product alone.
+
+version: 1
+framework_id: rgents
+# Bump when shipping changes that seeded products should pull.
+release: "2026.09.23"
+
+# Top-level surfaces copied on create (then pruned / re-scaffolded).
+create_surfaces:
+  - AGENTS.md
+  - .cursor
+  - .agent
+  - .gitignore
+  - .github
+  - docs/agents
+  - docs/knowledge
+  - docs/architecture
+
+# On upgrade: replace these paths from the framework (repo-relative, trailing / = directory).
+# Product-owned paths below are never in this list.
+replaceable:
+  - AGENTS.md
+  - .cursor/
+  - .gitignore
+  - .github/workflows/
+  - .agent/config.yaml
+  - .agent/schemas/
+  - .agent/workflows/
+  - .agent/templates/
+  - .agent/models/seed.yaml
+  - .agent/framework-manifest.yaml
+  - .agent/tools/validate.py
+  - .agent/tools/init_project.py
+  - .agent/tools/init_project.cmd
+  - .agent/tools/init_project.ps1
+  - .agent/tools/init_project.sh
+  - .agent/tools/parallel_worktree.py
+  - .agent/tools/README.md
+  - docs/agents/
+  - docs/architecture/
+
+# Never overwrite on upgrade (product truth).
+product_owned:
+  - .agent/project-baseline.yaml
+  - .agent/seeded-from.yaml
+  - .agent/models/available.yaml
+  - docs/knowledge/
+  - tasks/
+  - src/
+  - README.md
+
+# Directory / file name patterns stripped after copy and never upgraded in.
+never_copy_names:
+  - __pycache__
+  - .selftest-scratch
+  - .selftest-validate-log
+  - .selftest-parallel
+  - .selftest-dup
+  - .selftest-portability
+  - .selftest-repo-check
+  - .rgents
+
+# Tools that act ON a project — remove from create target; do not install on upgrade.
+provisioning_tools:
+  - bootstrap-project.ps1
+  - bootstrap-product-skeleton.ps1
+  - seed_framework.py
