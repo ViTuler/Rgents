@@ -1,24 +1,25 @@
 # Rgents 修正清单与方案
 
-- **日期:** 2026-09-22
-- **状态:** **批次 A–D 已落地（C0–C7）· 修正包实施完成**
+- **日期:** 2026-09-22（收束 2026-09-23）
+- **状态:** **第一次设计修正已结束（closed）**
+- **本轮交付:** C0–C7 + N2（播种 create/upgrade）+ N3（轻量框架 CI）；PR 已由人创建
 - **权威文本:** 本文档（画布 `rgents-correction-backlog.canvas.tsx` 仅为 IDE 对照，不进仓库）
-- **范围:** 框架设计与工具修正 C0–C7（本仓库是框架本身，不是产品应用）
-- **治理:** 人类已授权主线程直接改批次 A–D（`.agent/**`、`.cursor/**`、相关 docs）
+- **范围:** 框架设计与工具修正（本仓库是框架本身，不是产品应用）
+- **下一步:** 用**新开产品项目**做播种与端到端测试；下版设计候选见 [`next-edition-notes.md`](./next-edition-notes.md)（首项 N1）
 
 ---
 
 ## 开干检查清单
 
-在第一次改仓库文件之前，确认：
-
 | # | 项 | 状态 |
 |---|-----|------|
-| 1 | 本清单 C0–C7 方案已读且无异议 | 设计侧：已冻结 |
-| 2 | 人类授权：「允许为 C0–C7 修改 `.agent` 与 `.cursor`（及必要的 docs/README）」 | **已授权（批次 A–D）** |
-| 3 | 实施切分：建议 **批次 A** = C0+C6+C7；**批次 B** = C3+C4；**批次 C** = C5+C1；**批次 D** = C2（单独任务） | **A–D 完成** |
-| 4 | 环境：conda 非 base；改 validate 后跑 `python .agent/tools/validate.py --selftest` 与 `--check-setup` | 实施时执行 |
-| 5 | 走正式任务车道：`/spec` 起任务（或你声明 bypass 流水线由主线程直接改） | bypass 主线程 |
+| 1 | 本清单 C0–C7 方案已读且无异议 | 已冻结并实施 |
+| 2 | 人类授权修改 `.agent` / `.cursor` / 相关 docs | **已授权；本轮关闭** |
+| 3 | 批次 A–D（C0–C7） | **完成** |
+| 4 | 增补 N2 播种升级、N3 轻量 CI | **完成** |
+| 5 | `validate.py --selftest` / `--check-setup`（conda `vi`） | 实施期已跑通 |
+| 6 | PR 合入 `main` | **人已开 PR；合入由人决定** |
+| 7 | 新开产品仓验证 create / upgrade / 轻量 CI | **待人执行（本轮设计修正至此为止）** |
 
 ---
 
@@ -34,6 +35,8 @@
 | C | 6 | C5 product/reviewer 不改源码 | P2 | 契约文案 |
 | C | 7 | C1 模型编配 | P2 | 目录 + assignments；依赖 C7 init 钩子 |
 | D | 8 | C2 worktree + 锁 | P3 | **单独任务**；体量最大 |
+| — | 9 | N2 播种 create/upgrade | — | 本轮收尾增补 |
+| — | 10 | N3 轻量框架 CI | — | 本轮收尾增补；**不**重跑产品测试 |
 
 ---
 
@@ -205,28 +208,24 @@ plan: parallel_group + claimed_paths
 
 ---
 
-## 明确不在本轮
+## 明确不在本轮（第一次修正）
 
 | 项 | 原因 |
 |----|------|
-| 会话外（CI）重跑测试 | 已推迟；2026-09-23 人确认暂不考虑（影响分析见会话，不阻塞本包） |
-| `accepted_risk` 清单、retry 死代码核查、四专家补测 | 未纳入本包 |
-| 「框架无 git」 | 已过时（本仓已有 git）；扁平历史另议 |
-| 角色间辩论 / 协作拓扑 | **本版不做**；已记入 `docs/architecture/next-edition-notes.md` → N1 |
+| 会话外 CI **重跑产品测试** | 成本与角色边界；轻量框架 CI 已做（N3），产品测仍不做 |
+| `accepted_risk` 清单、retry 死代码核查、四专家补测 | 未纳入第一次修正 |
+| 「框架无 git」 | 已过时；扁平历史另议 |
+| 角色间辩论 / 协作拓扑 | **第一次不做**；下版候选 **N1** |
 
-下版候选备忘的权威入口：[`next-edition-notes.md`](./next-edition-notes.md)。
+下版候选备忘：[`next-edition-notes.md`](./next-edition-notes.md)。
 
 ---
 
-## 治理与授权（待回复）
+## 第一次修正收束
 
-请人类回复其一（或改写）：
-
-1. **授权全文：**「允许为实施 C0–C7 修改 `.agent/**`、`.cursor/**`、相关 `docs/**` 与 `README.md`。」  
-2. **授权批次 A：**「仅允许先做批次 A（C0/C6/C7）。」  
-3. **走流水线：**「先 `/spec` 开 TASK，再按 plan 改。」  
-
-未授权前，代理**只维护本清单类文档，不改治理面与 validate 行为。**
+- **2026-09-23** 人确认：设计部分第一次修正到此为止；后续用**新开项目**做测试。
+- 本清单不再作为「待授权开干」文档；未完成项转入下版 note，不在本文件继续扩 scope。
+- 合 PR、播种新产品仓、跑端到端任务 —— **人侧操作**；代理仅在被点名时再介入。
 
 ---
 
@@ -246,3 +245,4 @@ plan: parallel_group + claimed_paths
 | 2026-09-23 | 人确认：CI 重跑暂不考虑；角色辩论/协作记入 `next-edition-notes.md` N1；播种修正进入讨论 |
 | 2026-09-23 | **播种升级落地：** `framework-manifest.yaml` + `seed_framework.py` create/upgrade；bootstrap 薄封装；N2 关闭 |
 | 2026-09-23 | **轻量 CI 落地：** `framework-ci.yml` + `validate --ci-changed`（active `--all`）；N3 关闭；仍不重跑产品测试 |
+| 2026-09-23 | **第一次设计修正收束（closed）：** PR 已开；下步人新开产品仓测试；下版入口 N1 |

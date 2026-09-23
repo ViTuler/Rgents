@@ -134,9 +134,10 @@ breaks a downstream gate; free-form nuance must be forced into fields.
 ## ADR-003 — Framework correction package C0–C7 (accepted)
 
 - **Status:** accepted
-- **Date:** 2026-09-22
-- **Task:** correction backlog (batches A–D, main-thread bypass)
+- **Date:** 2026-09-22（收束 2026-09-23）
+- **Task:** correction backlog (batches A–D + N2/N3 follow-ons; main-thread bypass)
 - **Deciders:** human owner
+- **Closure:** 第一次设计修正于 2026-09-23 人为结束；验证改由新开产品项目进行。下版首项见 `docs/architecture/next-edition-notes.md` → N1。
 
 ### Context
 
@@ -144,11 +145,11 @@ breaks a downstream gate; free-form nuance must be forced into fields.
 
 ### Decision
 
-按该清单冻结的 C0–C7 方案实施；批次 A(C0/C6/C7) → B(C3/C4) → C(C5/C1) → D(C2)。会话外 CI 重跑测试本包不做。
+按该清单冻结的 C0–C7 方案实施；批次 A(C0/C6/C7) → B(C3/C4) → C(C5/C1) → D(C2)。收尾增补 N2（seed create/upgrade）与 N3（轻量框架 CI：selftest / check-setup / ci-changed）。**不**在 validate 内重跑产品测试。
 
 ### Consequences
 
-**Easier:** 信任根与并行语义可机械执行；新项目可本地 git + 基线 + 模型目录；并行步有 path lease + worktree。
+**Easier:** 信任根与并行语义可机械执行；新项目可本地 git + 基线 + 模型目录；并行步有 path lease + worktree；产品仓可从框架 checkout 升级治理面。
 
 **Harder:** 治理面与 validate 变更面大；C1 依赖 API Key 或种子；C2 增加 worktree/锁运维。
 
@@ -160,4 +161,5 @@ breaks a downstream gate; free-form nuance must be forced into fields.
 | frontmatter 写死三模型 | 不如目录+assignments+互异校验可移植 |
 | MD5 文件账本约束写权 | 成本高于收益 |
 | 并行仍共工作区只靠提示 | 无法防止真实竞态 |
+| validate/CI 默认重跑全量产品测试 | 成本高且模糊 developer/QA 边界 |
 
