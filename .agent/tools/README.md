@@ -4,11 +4,12 @@ Tools here act **on** a project. They are not part of a product application's bu
 
 | File | Runs where | Copied into a project? |
 |---|---|---|
-| `validate.py` | inside a project (`python .agent/tools/validate.py ...`) | **yes** — gate machinery |
+| `validate.py` | inside a project (`python .agent/tools/validate.py ...`) | **yes** — gate machinery; also `--ci-changed` for light CI |
 | `init_project.py` (+ `.cmd` / `.ps1` / `.sh`) | inside a project or pointed at `--target` | **yes** — local `git init`, no remote |
 | `parallel_worktree.py` | inside a project when a plan uses `parallel_group` | **yes** — path leases, merge lock, git worktrees (C2) |
-| `bootstrap-project.ps1` | from the framework, pointed at a new project | **no** — removed from the target |
-| `bootstrap-product-skeleton.ps1` | from the framework, via `-WithProductSkeleton` | **no** — same reason |
+| `seed_framework.py` | from the **framework** checkout, pointed at a product | **no** — create / upgrade provisioning |
+| `bootstrap-project.ps1` | thin wrapper → `seed_framework.py create` | **no** — removed from the target |
+| `bootstrap-product-skeleton.ps1` | from the framework, via `--with-product-skeleton` | **no** — same reason |
 
 ## Why some tools are removed from the target
 
@@ -16,44 +17,54 @@ A copied tool is a second copy that drifts. Worse, `bootstrap-product-skeleton.p
 product's stack, and leaving it in a seeded project would suggest the framework has an opinion about
 that project's stack. It does not.
 
-The line is: **anything a project needs at run time is copied; anything used to create a project is
-not.** If a tool turns out to be needed at run time, that is a change to this table and to the
-bootstrap's exclusion list, not something to leave lying in the target.
+The line is: **anything a project needs at run time is copied; anything used to create or upgrade a
+project is not.** Contract: `.agent/framework-manifest.yaml`.
 
-## Bootstrapping a project
+## Create (first seed)
 
 ```
+python .agent/tools/seed_framework.py create --target <new-project-path>
+# or
 ./.agent/tools/bootstrap-project.ps1 -Target <new-project-path> [-WithProductSkeleton]
 ```
 
-It refuses to seed into a non-empty directory, derives the framework root from its own location,
-copies the framework surfaces, scaffolds knowledge files and **`.agent/project-baseline.yaml` from
-the empty template** (never the framework's own `framework_meta` baseline), creates empty task lanes,
-and runs `init_project.py` so the target has a local git repo **without** a remote.
+- Refuses a non-empty directory.
+- Copies framework surfaces listed in the manifest; strips `__pycache__` / selftest scratch / provisioning tools.
+- Re-scaffolds `docs/knowledge/*` and `.agent/project-baseline.yaml` from **templates** (never the framework's own facts).
+- Writes `.agent/seeded-from.yaml` (release + framework commit).
+- Runs `init_project.py` (local git, no remote). Does **not** create the first commit.
 
-**It does not create the first commit or add a remote.** The human owns those.
+## Upgrade (existing product)
+
+```
+python .agent/tools/seed_framework.py upgrade --target <product-path> --dry-run
+python .agent/tools/seed_framework.py upgrade --target <product-path> --yes
+```
+
+- Replaces only `replaceable` paths from the manifest.
+- Never touches `product_owned` (baseline, knowledge, tasks, `available.yaml`, …).
+- Backs up prior copies under `.rgents/upgrade-backups/<date>/`.
+- Rewrites `.agent/seeded-from.yaml`.
 
 ## Initializing git alone
 
 ```
 python .agent/tools/init_project.py
-python .agent/tools/init_project.py --target <path> --ensure-baseline
+python .agent/tools/init_project.py --target <path> --ensure-baseline --refresh-models
 ```
 
-## What the bootstrap deliberately does not copy
+## What create deliberately does not copy
 
 | Path | Why |
 |---|---|
 | `refers/` | reference reading for the framework's authors; inert at runtime |
 | `README.md` | the product repository writes its own |
-| `tasks/**` | the previous project's task history belongs to that project |
-| `bootstrap-*.ps1` | see above |
+| `tasks/**` | the previous project's task history |
+| provisioning tools | see table above |
+| `__pycache__` / `.selftest*` | scratch; never ship |
 
 ## The trap this design exists to close
 
 Copying `docs/knowledge/` wholesale ships **the framework's own accumulated facts** into the new
-project. That mistake was made twice while this framework was being tested: framework known issues
-landed in a product repository, and then one product's known issues landed back in the framework's
-template slot. Both are the same defect in opposite directions.
-
-Scaffolding from `.agent/templates/knowledge/` (and the project-baseline template) is the fix.
+project. Scaffolding from `.agent/templates/knowledge/` (and the project-baseline template) is the fix.
+Upgrade must not reintroduce that trap: knowledge and baseline stay product-owned forever.

@@ -1,2 +1,6 @@
 # Rgents runtime / scratch (never commit)
 .rgents/
+.agent/.selftest*/
+.agent/tools/__pycache__/
+**/__pycache__/
+*.py[cod]

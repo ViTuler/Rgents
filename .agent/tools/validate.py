@@ -18,6 +18,7 @@ Usage
 -----
     python .agent/tools/validate.py --selftest
     python .agent/tools/validate.py --check-setup
+    python .agent/tools/validate.py --ci-changed --base origin/main
     python .agent/tools/validate.py --artifact tasks/TASK-001/plan.json
     python .agent/tools/validate.py --task TASK-001 --stage plan
     python .agent/tools/validate.py --task TASK-001 --stage implementation
@@ -2328,6 +2329,7 @@ def check_setup(problems: Report) -> None:
 
     check_project_baseline(problems)
     check_models_catalog(problems)
+    check_seeded_from(problems)
 
     problems.note(f"{len(agent_files)} agent definitions, {len(declared_roles)} roles declared in config, "
                   f"{len(rule_names)} rules")
@@ -2336,6 +2338,50 @@ def check_setup(problems: Report) -> None:
 
 
 _BASELINE_STATUSES = frozenset({"template", "established", "framework_meta"})
+
+
+def check_seeded_from(problems: Report) -> None:
+    """Product repos should record how they were seeded; the framework repo itself need not."""
+    baseline_path = REPO_ROOT / ".agent" / "project-baseline.yaml"
+    status = None
+    if baseline_path.is_file():
+        try:
+            data = parse_yaml(baseline_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                status = data.get("status")
+        except Exception:  # noqa: BLE001
+            status = None
+    if status == "framework_meta":
+        manifest = REPO_ROOT / ".agent" / "framework-manifest.yaml"
+        if not manifest.is_file():
+            problems.error(
+                "framework_manifest_missing",
+                "this repository is framework_meta but .agent/framework-manifest.yaml is missing",
+                ".agent/framework-manifest.yaml",
+            )
+        else:
+            problems.note("framework manifest present (this repository is the agent framework)")
+        return
+
+    seeded = REPO_ROOT / ".agent" / "seeded-from.yaml"
+    rel = ".agent/seeded-from.yaml"
+    if not seeded.is_file():
+        problems.warn(
+            "seeded_from_missing",
+            "no .agent/seeded-from.yaml — project may predate seed_framework, or was copied by hand. "
+            "Re-seed or run upgrade from a framework checkout to record release metadata.",
+            rel,
+        )
+        return
+    try:
+        data = parse_yaml(seeded.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        problems.error("seeded_from_parse", f"cannot parse seeded-from: {exc}", rel)
+        return
+    if not isinstance(data, dict) or not data.get("release"):
+        problems.warn("seeded_from_incomplete", "seeded-from.yaml missing release field", rel)
+    else:
+        problems.note(f"seeded-from release={data.get('release')!r} op={data.get('last_operation')!r}")
 
 
 def check_project_baseline(problems: Report) -> None:
@@ -3425,6 +3471,23 @@ def run_selftest() -> int:
         except OSError:
             pass
 
+    # 24b. ci-changed path → active task id extraction --------------------------------------------
+    extracted = active_task_ids_from_paths(
+        [
+            "tasks/active/TASK-010/intake.json",
+            "tasks/active/TASK-010/plan.json",
+            "tasks/completed/TASK-002/qa-report.json",
+            "tasks/archive/TASK-003/intake.json",
+            "README.md",
+            "tasks/active/TASK-011/worker-result.json",
+        ]
+    )
+    canary(
+        "ci-changed extracts unique active TASK ids and ignores completed/archive",
+        extracted == ["TASK-010", "TASK-011"],
+        f"got {extracted}",
+    )
+
     # 25. the repository's own setup must be self-consistent ----------------------------------------
     report = Report("canary")
     check_setup(report)
@@ -3468,6 +3531,89 @@ def resolve_artifact_path(raw: str) -> Path:
     return path.resolve() if path.is_absolute() else (REPO_ROOT / path).resolve()
 
 
+_ACTIVE_TASK_PATH = re.compile(r"^tasks/active/(TASK-\d+)(?:/|$)")
+
+
+def active_task_ids_from_paths(paths: list[str]) -> list[str]:
+    """Return unique TASK-IDs under tasks/active/ mentioned by the given repo-relative paths."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for raw in paths:
+        normalized = raw.replace("\\", "/").lstrip("./")
+        match = _ACTIVE_TASK_PATH.match(normalized)
+        if not match:
+            continue
+        task_id = match.group(1)
+        if task_id not in seen:
+            seen.add(task_id)
+            found.append(task_id)
+    return found
+
+
+def git_diff_name_only(base_ref: str) -> tuple[list[str] | None, str | None]:
+    """Return paths changed between base_ref and HEAD, or (None, reason) on failure."""
+    if not base_ref or re.fullmatch(r"0+", base_ref):
+        return None, "base ref is empty or an all-zero SHA (nothing to diff against)"
+    result = subprocess.run(
+        ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", base_ref, "HEAD"],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()
+        return None, f"git diff failed against {base_ref!r}: {detail}"
+    paths = [line.strip() for line in (result.stdout or "").splitlines() if line.strip()]
+    return paths, None
+
+
+def run_ci_changed(base_ref: str) -> int:
+    """CI job C: shape-check every active task touched since base_ref (``--all`` per task).
+
+    Does not re-run product tests. Trusts developer/QA reports; only enforces artifact invariants.
+    """
+    print(f"== ci-changed (base={base_ref})")
+    paths, err = git_diff_name_only(base_ref)
+    if err:
+        print(f"ERROR: {err}", file=sys.stderr)
+        return 2
+    assert paths is not None
+    task_ids = active_task_ids_from_paths(paths)
+    if not task_ids:
+        print("   no tasks/active/TASK-* paths changed; skip")
+        return 0
+    print(f"   changed active tasks: {', '.join(task_ids)}")
+    exit_code = 0
+    for task_id in task_ids:
+        task_dir = REPO_ROOT / "tasks" / "active" / task_id
+        if not task_dir.is_dir():
+            print(
+                f"ERROR: changed path names {task_id} but directory missing: {task_dir}",
+                file=sys.stderr,
+            )
+            exit_code = max(exit_code, 1)
+            continue
+        stages = applicable_stages(task_dir)
+        print(f"   applicable stages for {task_id}: {stages}")
+        for stage in stages:
+            report = Report(f"task {task_id} :: stage {stage}")
+            STAGE_CHECKERS[stage](task_dir, report)
+            log_path = write_validate_log(task_dir, stage, report)
+            if log_path is not None:
+                report.note(f"validate log: {log_path.relative_to(REPO_ROOT).as_posix()}")
+            exit_code = max(exit_code, report.emit())
+    return exit_code
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Rgents artifact validator, gate invariant checker, and setup linter.",
@@ -3480,10 +3626,23 @@ def main() -> int:
     parser.add_argument("--all", action="store_true", help="run every stage check for the task")
     parser.add_argument("--check-setup", action="store_true", help="lint the repository's team configuration")
     parser.add_argument("--selftest", action="store_true", help="prove the invariants fire on known-bad input")
+    parser.add_argument(
+        "--ci-changed",
+        action="store_true",
+        help="CI: run --all on each tasks/active/TASK-* touched since --base (shape only; no product tests)",
+    )
+    parser.add_argument(
+        "--base",
+        default="origin/main",
+        help="git ref for --ci-changed (default: origin/main). Use the PR base or previous push SHA in CI.",
+    )
     args = parser.parse_args()
 
     if args.selftest:
         return run_selftest()
+
+    if args.ci_changed:
+        return run_ci_changed(args.base)
 
     exit_code = 0
 
@@ -3520,7 +3679,7 @@ def main() -> int:
                 report.note(f"validate log: {log_path.relative_to(REPO_ROOT).as_posix()}")
             exit_code = max(exit_code, report.emit())
 
-    if not any([args.artifact, args.check_setup, args.task, args.task_dir, args.all]):
+    if not any([args.artifact, args.check_setup, args.task, args.task_dir, args.all, args.ci_changed]):
         parser.print_help()
         return 0
 

@@ -209,9 +209,12 @@ plan: parallel_group + claimed_paths
 
 | 项 | 原因 |
 |----|------|
-| 会话外（CI）重跑测试 | 已推迟 |
+| 会话外（CI）重跑测试 | 已推迟；2026-09-23 人确认暂不考虑（影响分析见会话，不阻塞本包） |
 | `accepted_risk` 清单、retry 死代码核查、四专家补测 | 未纳入本包 |
 | 「框架无 git」 | 已过时（本仓已有 git）；扁平历史另议 |
+| 角色间辩论 / 协作拓扑 | **本版不做**；已记入 `docs/architecture/next-edition-notes.md` → N1 |
+
+下版候选备忘的权威入口：[`next-edition-notes.md`](./next-edition-notes.md)。
 
 ---
 
@@ -240,3 +243,6 @@ plan: parallel_group + claimed_paths
 | 2026-09-22 | **批次 B 落地：** C3 `classification_confirmation`；C4 validate logs + QA `validate_log_ids`；selftest+TASK-002 --all PASS |
 | 2026-09-22 | **批次 C 落地：** C5 product/reviewer NON-GOALS + reviewer diff；C1 models catalog + assignments + triangle validate；init --refresh-models |
 | 2026-09-22 | **批次 D 落地：** C2 `parallel_worktree.py`（path lease + merge lock + git worktree）；plan `streams[].claimed_paths`；validate 相交检查 |
+| 2026-09-23 | 人确认：CI 重跑暂不考虑；角色辩论/协作记入 `next-edition-notes.md` N1；播种修正进入讨论 |
+| 2026-09-23 | **播种升级落地：** `framework-manifest.yaml` + `seed_framework.py` create/upgrade；bootstrap 薄封装；N2 关闭 |
+| 2026-09-23 | **轻量 CI 落地：** `framework-ci.yml` + `validate --ci-changed`（active `--all`）；N3 关闭；仍不重跑产品测试 |
