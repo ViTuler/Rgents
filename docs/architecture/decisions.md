@@ -134,9 +134,11 @@ breaks a downstream gate; free-form nuance must be forced into fields.
 ## ADR-003 — Framework correction package C0–C7 (accepted)
 
 - **Status:** accepted
-- **Date:** 2026-09-22
-- **Task:** correction backlog (batches A–D, main-thread bypass)
+- **Date:** 2026-09-22（收束 / 版本 2026-09-23）
+- **Framework release:** **1.0.0**
+- **Task:** correction backlog (batches A–D + N2/N3; main-thread bypass)
 - **Deciders:** human owner
+- **Closure:** 第一次设计修正结束；版本标记为 1.0.0。验证改由新开产品项目进行。下版首项见 `next-edition-notes.md` → N1。
 
 ### Context
 

@@ -2,7 +2,9 @@
 
 > The constitution of this repository's agent team. Short by design.
 > Every agent reads this file first. Rules live in `.cursor/rules/`. Roles live in `.cursor/agents/`.
-> 中文使用说明见 `docs/zh/README.zh-CN.md`。
+> 中文使用说明见 `docs/zh/README.zh-CN.md`.
+>
+> **Framework release:** `1.0.0` (`VERSION`, `.agent/framework-manifest.yaml`)
 
 ## Mission
 

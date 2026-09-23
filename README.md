@@ -1,5 +1,7 @@
 # Rgents
 
+**Version:** `1.0.0` (see `VERSION` and `.agent/framework-manifest.yaml → release`)
+
 A **multi-agent software development organization** for Cursor (and any agent runtime that reads
 `.cursor/agents/*.md` — Claude Code, Codex, and DeepSeek Harness subagents all work with the same files).
 

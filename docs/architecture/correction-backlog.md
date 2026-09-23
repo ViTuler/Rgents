@@ -1,10 +1,12 @@
 # Rgents 修正清单与方案
 
-- **日期:** 2026-09-22
-- **状态:** **批次 A–D 已落地（C0–C7）· 修正包实施完成**
+- **日期:** 2026-09-22（收束 / 版本标记 2026-09-23）
+- **状态:** **第一次设计修正已结束 · 框架版本 1.0.0**
+- **框架版本:** **1.0.0**（`VERSION`；`.agent/framework-manifest.yaml → release`）
 - **权威文本:** 本文档（画布 `rgents-correction-backlog.canvas.tsx` 仅为 IDE 对照，不进仓库）
-- **范围:** 框架设计与工具修正 C0–C7（本仓库是框架本身，不是产品应用）
-- **治理:** 人类已授权主线程直接改批次 A–D（`.agent/**`、`.cursor/**`、相关 docs）
+- **范围:** 框架设计与工具修正 C0–C7 + N2/N3（本仓库是框架本身，不是产品应用）
+- **治理:** 人类已授权主线程直接改；本轮关闭。下版入口见 `next-edition-notes.md`（N1）
+- **下一步:** 新开产品项目做播种与端到端测试
 
 ---
 
@@ -246,3 +248,4 @@ plan: parallel_group + claimed_paths
 | 2026-09-23 | 人确认：CI 重跑暂不考虑；角色辩论/协作记入 `next-edition-notes.md` N1；播种修正进入讨论 |
 | 2026-09-23 | **播种升级落地：** `framework-manifest.yaml` + `seed_framework.py` create/upgrade；bootstrap 薄封装；N2 关闭 |
 | 2026-09-23 | **轻量 CI 落地：** `framework-ci.yml` + `validate --ci-changed`（active `--all`）；N3 关闭；仍不重跑产品测试 |
+| 2026-09-23 | **框架版本标记为 1.0.0**（`VERSION` + manifest `release`）；第一次设计修正收束 |

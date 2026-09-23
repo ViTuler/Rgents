@@ -2360,7 +2360,15 @@ def check_seeded_from(problems: Report) -> None:
                 ".agent/framework-manifest.yaml",
             )
         else:
-            problems.note("framework manifest present (this repository is the agent framework)")
+            try:
+                data = parse_yaml(manifest.read_text(encoding="utf-8"))
+                release = data.get("release") if isinstance(data, dict) else None
+            except Exception:  # noqa: BLE001
+                release = None
+            problems.note(
+                f"framework manifest present (this repository is the agent framework)"
+                + (f", release={release!r}" if release else "")
+            )
         return
 
     seeded = REPO_ROOT / ".agent" / "seeded-from.yaml"

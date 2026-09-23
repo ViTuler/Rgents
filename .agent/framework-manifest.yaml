@@ -4,8 +4,8 @@
 
 version: 1
 framework_id: rgents
-# Bump when shipping changes that seeded products should pull.
-release: "2026.09.23"
+# Semver of this framework release. Bump when shipping changes seeded products should pull.
+release: "1.0.0"
 
 # Top-level surfaces copied on create (then pruned / re-scaffolded).
 create_surfaces:
@@ -14,6 +14,7 @@ create_surfaces:
   - .agent
   - .gitignore
   - .github
+  - VERSION
   - docs/agents
   - docs/knowledge
   - docs/architecture
@@ -25,6 +26,7 @@ replaceable:
   - .cursor/
   - .gitignore
   - .github/workflows/
+  - VERSION
   - .agent/config.yaml
   - .agent/schemas/
   - .agent/workflows/
