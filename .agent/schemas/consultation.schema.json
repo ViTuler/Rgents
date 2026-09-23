@@ -1,43 +1,184 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "consultation.schema.json",
-  "title": "design-time consultation",
-  "description": "A specialist review of a design, written BEFORE implementation. Sole writer: the consulting specialist. This is not a gate report: it records whether the frozen design may proceed, not whether finished code passes a gate. security-report.json and the other gate reports are written later, against real code, and must not be used to record this review.",
-  "type": "object",
-  "required": ["task_id", "role", "phase", "verdict", "artifacts_reviewed", "binding_constraints"],
-  "additionalProperties": true,
-  "properties": {
-    "task_id": { "type": "string", "pattern": "^TASK-[0-9]{3,}$" },
-    "role": { "type": "string", "enum": ["ux", "security", "database", "performance", "data"] },
-    "phase": { "type": "string", "const": "design", "description": "Const, so a post-implementation gate report can never be passed off as a design consultation." },
-    "verdict": { "type": "string", "enum": ["PASS", "FAIL"], "description": "FAIL means the defect is corrected in the design stage, not deferred to the implementation gates. SKIP is unavailable on purpose: a specialist that should not have been consulted is removed from the plan instead, so its skip is recorded in intake.json like every other skip." },
-    "artifacts_reviewed": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "The artifact paths this consultation actually read. A consultation that reviewed nothing cannot be told apart from no consultation." },
-    "binding_constraints": {
-      "type": "array",
-      "description": "Constraints the implementation must honor, stated so they can be checked in code. Required, possibly empty: an empty list is a claim that it leaves none.",
-      "items": { "type": "object", "required": ["constraint"], "properties": { "id": { "type": "string" }, "constraint": { "type": "string", "minLength": 5 }, "rationale": { "type": "string" } } }
-    },
-    "blocking_design_defects": {
-      "type": "array",
-      "description": "Defects that must be corrected before implementation.",
-      "items": { "type": "object", "required": ["defect"], "properties": { "defect": { "type": "string", "minLength": 5 }, "where": { "type": "string" }, "correction": { "type": "string" } } }
-    },
-    "non_blocking_notes": {
-      "type": "array",
-      "items": { "type": "object", "required": ["note"], "properties": { "id": { "type": "string" }, "note": { "type": "string", "minLength": 5 }, "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] }, "evidence": { "type": "string" } } }
-    },
-    "not_reviewed": {
-      "type": "array",
-      "description": "What this consultation did not examine, and why. An honest gap is a record; a silent gap is a defect.",
-      "items": { "type": "object", "required": ["item", "reason"], "properties": { "item": { "type": "string" }, "reason": { "type": "string" } } }
-    },
-    "backfilled": {
-      "type": "object",
-      "description": "Present only when the consultation happened before this artifact existed and the record was reconstructed from the specialist delivered output. It must state that the specialist did not write the file, so a reconstructed record is never mistaken for a first-hand one.",
-      "required": ["reason", "authorised_by"],
-      "properties": { "reason": { "type": "string" }, "authorised_by": { "type": "string" } }
-    },
-    "self_assessment": { "type": "object", "properties": { "confidence": { "type": "string", "enum": ["low", "medium", "high"] }, "uncertainty_areas": { "type": "array", "items": { "type": "string" } } } },
-    "completed_at": { "type": "string" }
-  }
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "consultation.schema.json",
+    "title": "design-time consultation",
+    "description": "A specialist review of a design, written BEFORE implementation. Sole writer: the consulting specialist. This is not a gate report: it records whether the frozen design may proceed, not whether finished code passes a gate. security-report.json and the other gate reports are written later, against real code, and must not be used to record this review.",
+    "type": "object",
+    "required": [
+        "task_id",
+        "role",
+        "phase",
+        "verdict",
+        "artifacts_reviewed",
+        "binding_constraints"
+    ],
+    "additionalProperties": true,
+    "properties": {
+        "task_id": {
+            "type": "string",
+            "pattern": "^TASK-[0-9]{3,}$"
+        },
+        "role": {
+            "type": "string",
+            "enum": [
+                "ux",
+                "security",
+                "database",
+                "performance",
+                "data"
+            ]
+        },
+        "phase": {
+            "type": "string",
+            "const": "design",
+            "description": "Const, so a post-implementation gate report can never be passed off as a design consultation."
+        },
+        "verdict": {
+            "type": "string",
+            "enum": [
+                "PASS",
+                "FAIL"
+            ],
+            "description": "FAIL means the defect is corrected in the design stage, not deferred to the implementation gates. SKIP is unavailable on purpose: a specialist that should not have been consulted is removed from the plan instead, so its skip is recorded in intake.json like every other skip."
+        },
+        "artifacts_reviewed": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+                "type": "string"
+            },
+            "description": "The artifact paths this consultation actually read. A consultation that reviewed nothing cannot be told apart from no consultation."
+        },
+        "binding_constraints": {
+            "type": "array",
+            "description": "Constraints the implementation must honor, stated so they can be checked in code. Required, possibly empty: an empty list is a claim that it leaves none.",
+            "items": {
+                "type": "object",
+                "required": [
+                    "constraint"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "constraint": {
+                        "type": "string",
+                        "minLength": 5
+                    },
+                    "rationale": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "blocking_design_defects": {
+            "type": "array",
+            "description": "Defects that must be corrected before implementation.",
+            "items": {
+                "type": "object",
+                "required": [
+                    "defect"
+                ],
+                "properties": {
+                    "defect": {
+                        "type": "string",
+                        "minLength": 5
+                    },
+                    "where": {
+                        "type": "string"
+                    },
+                    "correction": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "non_blocking_notes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "note"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "note": {
+                        "type": "string",
+                        "minLength": 5
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": [
+                            "critical",
+                            "high",
+                            "medium",
+                            "low"
+                        ]
+                    },
+                    "evidence": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "not_reviewed": {
+            "type": "array",
+            "description": "What this consultation did not examine, and why. An honest gap is a record; a silent gap is a defect.",
+            "items": {
+                "type": "object",
+                "required": [
+                    "item",
+                    "reason"
+                ],
+                "properties": {
+                    "item": {
+                        "type": "string"
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "backfilled": {
+            "type": "object",
+            "description": "Present only when the consultation happened before this artifact existed and the record was reconstructed from the specialist delivered output. It must state that the specialist did not write the file, so a reconstructed record is never mistaken for a first-hand one.",
+            "required": [
+                "reason",
+                "authorised_by"
+            ],
+            "properties": {
+                "reason": {
+                    "type": "string"
+                },
+                "authorised_by": {
+                    "type": "string"
+                }
+            }
+        },
+        "self_assessment": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "string",
+                    "enum": [
+                        "low",
+                        "medium",
+                        "high"
+                    ]
+                },
+                "uncertainty_areas": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "completed_at": {
+            "type": "string"
+        }
+    }
 }

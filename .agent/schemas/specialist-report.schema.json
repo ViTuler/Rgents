@@ -1,82 +1,154 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "specialist-report.schema.json",
-  "title": "specialist report",
-  "description": "Shared shape for the five non-security specialist gates: ux-report.json (ux), db-report.json (database), perf-report.json (performance), data-report.json (data), delivery-report.json (devops). Sole writers: the respective specialist. The server column identifies which file and role a document must match.",
-  "type": "object",
-  "required": ["task_id", "role", "verdict", "findings"],
-  "additionalProperties": true,
-  "properties": {
-    "task_id": { "type": "string", "pattern": "^TASK-[0-9]{3,}$" },
-    "role": {
-      "type": "string",
-      "enum": ["ux", "database", "performance", "data", "devops"],
-      "description": "Must match the writer. The validator checks this against the filename."
-    },
-    "verdict": {
-      "type": "string",
-      "enum": ["PASS", "FAIL", "SKIP", "NOT APPLICABLE"],
-      "description": "SKIP is only valid when the activation conditions genuinely did not match, and must carry a reason."
-    },
-    "summary": { "type": "string" },
-    "skip_reason": {
-      "type": "string",
-      "description": "Required when verdict is SKIP or NOT APPLICABLE."
-    },
-    "findings": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["severity", "description"],
-        "properties": {
-          "id": { "type": "string" },
-          "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
-          "description": { "type": "string", "minLength": 5 },
-          "detail": { "type": "string" },
-          "file": { "type": "string" },
-          "line": { "type": "integer" },
-          "evidence": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "$id": "specialist-report.schema.json",
+    "title": "specialist report",
+    "description": "Shared shape for the five non-security specialist gates: ux-report.json (ux), db-report.json (database), perf-report.json (performance), data-report.json (data), delivery-report.json (devops). Sole writers: the respective specialist. The server column identifies which file and role a document must match.",
+    "type": "object",
+    "required": [
+        "task_id",
+        "role",
+        "verdict",
+        "findings"
+    ],
+    "additionalProperties": true,
+    "properties": {
+        "task_id": {
             "type": "string",
-            "description": "The measurement, query plan, observation, or trace that produced this finding."
-          },
-          "recommendation": { "type": "string" },
-          "blocking": { "type": "boolean" }
+            "pattern": "^TASK-[0-9]{3,}$"
+        },
+        "role": {
+            "type": "string",
+            "enum": [
+                "ux",
+                "database",
+                "performance",
+                "data",
+                "devops"
+            ],
+            "description": "Must match the writer. The validator checks this against the filename."
+        },
+        "verdict": {
+            "type": "string",
+            "enum": [
+                "PASS",
+                "FAIL",
+                "SKIP",
+                "NOT APPLICABLE"
+            ],
+            "description": "SKIP is only valid when the activation conditions genuinely did not match, and must carry a reason."
+        },
+        "summary": {
+            "type": "string"
+        },
+        "skip_reason": {
+            "type": "string",
+            "description": "Required when verdict is SKIP or NOT APPLICABLE."
+        },
+        "findings": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": [
+                    "severity",
+                    "description"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "severity": {
+                        "type": "string",
+                        "enum": [
+                            "critical",
+                            "high",
+                            "medium",
+                            "low"
+                        ]
+                    },
+                    "description": {
+                        "type": "string",
+                        "minLength": 5
+                    },
+                    "detail": {
+                        "type": "string"
+                    },
+                    "file": {
+                        "type": "string"
+                    },
+                    "line": {
+                        "type": "integer"
+                    },
+                    "evidence": {
+                        "type": "string",
+                        "description": "The measurement, query plan, observation, or trace that produced this finding."
+                    },
+                    "recommendation": {
+                        "type": "string"
+                    },
+                    "blocking": {
+                        "type": "boolean"
+                    }
+                }
+            }
+        },
+        "blocking_findings": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "Finding IDs that must be resolved before merge or deploy."
+        },
+        "required_before_merge": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "description": "The concrete fix list."
+        },
+        "not_assessed": {
+            "type": "array",
+            "description": "What this specialist could not assess, and why. An honest gap is a finding; a silent gap is a defect.",
+            "items": {
+                "type": "object",
+                "required": [
+                    "item",
+                    "reason"
+                ],
+                "properties": {
+                    "item": {
+                        "type": "string"
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "role_specific": {
+            "type": "object",
+            "description": "Role-specific sections live here. Shapes are declared in each role's definition file. Kept open so a specialist can report rich evidence without a schema churn."
+        },
+        "self_assessment": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "string",
+                    "enum": [
+                        "low",
+                        "medium",
+                        "high"
+                    ]
+                },
+                "uncertainty_areas": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "completed_at": {
+            "type": "string"
         }
-      }
-    },
-    "blocking_findings": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "Finding IDs that must be resolved before merge or deploy."
-    },
-    "required_before_merge": {
-      "type": "array",
-      "items": { "type": "string" },
-      "description": "The concrete fix list."
-    },
-    "not_assessed": {
-      "type": "array",
-      "description": "What this specialist could not assess, and why. An honest gap is a finding; a silent gap is a defect.",
-      "items": {
-        "type": "object",
-        "required": ["item", "reason"],
-        "properties": {
-          "item": { "type": "string" },
-          "reason": { "type": "string" }
-        }
-      }
-    },
-    "role_specific": {
-      "type": "object",
-      "description": "Role-specific sections live here. Shapes are declared in each role's definition file. Kept open so a specialist can report rich evidence without a schema churn."
-    },
-    "self_assessment": {
-      "type": "object",
-      "properties": {
-        "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
-        "uncertainty_areas": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-    "completed_at": { "type": "string" }
-  }
+    }
 }

@@ -1,56 +1,105 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rgents.local/schemas/project-baseline.schema.json",
-  "title": "Project technical baseline",
-  "description": "Structured stack and command baseline owned after project-level spec/design (human + product + tech-lead). Not a per-task rediscovery sheet.",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["version", "status"],
-  "properties": {
-    "version": { "type": "integer", "const": 1 },
-    "status": {
-      "type": "string",
-      "enum": ["template", "established", "framework_meta"]
-    },
-    "decided_by": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "human": { "type": "boolean" },
-        "product": { "type": "boolean" },
-        "tech_lead": { "type": "boolean" }
-      }
-    },
-    "decided_at": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
-    "stack": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "language": { "type": "string" },
-        "runtime": { "type": "string" },
-        "environment_manager": { "type": "string" },
-        "environment_name": { "type": "string" },
-        "package_manager": { "type": "string" },
-        "frameworks": { "type": "string" },
-        "notes": { "type": "string" }
-      }
-    },
-    "commands": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "install": { "type": "string" },
-        "lint": { "type": "string" },
-        "typecheck": { "type": "string" },
-        "test": { "type": "string" },
-        "build": { "type": "string" },
-        "run": { "type": "string" }
-      }
-    },
-    "services": {
-      "type": "array",
-      "items": { "type": "string" }
-    },
-    "notes": { "type": "string" }
-  }
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://rgents.local/schemas/project-baseline.schema.json",
+    "title": "Project technical baseline",
+    "description": "Structured stack and command baseline owned after project-level spec/design (human + product + tech-lead). Not a per-task rediscovery sheet.",
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+        "version",
+        "status"
+    ],
+    "properties": {
+        "version": {
+            "type": "integer",
+            "const": 1
+        },
+        "status": {
+            "type": "string",
+            "enum": [
+                "template",
+                "established",
+                "framework_meta"
+            ]
+        },
+        "decided_by": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "human": {
+                    "type": "boolean"
+                },
+                "product": {
+                    "type": "boolean"
+                },
+                "tech_lead": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "decided_at": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "stack": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "language": {
+                    "type": "string"
+                },
+                "runtime": {
+                    "type": "string"
+                },
+                "environment_manager": {
+                    "type": "string"
+                },
+                "environment_name": {
+                    "type": "string"
+                },
+                "package_manager": {
+                    "type": "string"
+                },
+                "frameworks": {
+                    "type": "string"
+                },
+                "notes": {
+                    "type": "string"
+                }
+            }
+        },
+        "commands": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "install": {
+                    "type": "string"
+                },
+                "lint": {
+                    "type": "string"
+                },
+                "typecheck": {
+                    "type": "string"
+                },
+                "test": {
+                    "type": "string"
+                },
+                "build": {
+                    "type": "string"
+                },
+                "run": {
+                    "type": "string"
+                }
+            }
+        },
+        "services": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "notes": {
+            "type": "string"
+        }
+    }
 }

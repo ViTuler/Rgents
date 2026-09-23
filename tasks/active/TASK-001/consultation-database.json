@@ -1,38 +1,84 @@
 {
-  "task_id": "TASK-001",
-  "role": "database",
-  "phase": "design",
-  "verdict": "PASS",
-  "summary": "The proposed table, the three point statements, the primary-key-only index, and one connection with a commit per successful insert or delete can express the requirements. Nothing here is a critical or high design defect. db-report.json was not written, and the migration was not created or applied.",
-  "artifacts_reviewed": ["design.json", "plan.json"],
-  "backfilled": {
-    "reason": "This consultation was performed and delivered, and no artifact existed to record it: the framework had no artifact for a design-time specialist consultation, so the review survived only as a message. The consulting specialist did not write this file; it was reconstructed from that specialist's delivered output under explicit human authorisation, and it must not be read as evidence that the specialist wrote it.",
-    "authorised_by": "human"
-  },
-  "design_corrections_required": [
-    {
-      "where": "design.json data_model.migration_notes",
-      "claim": "no CHECK (so IntegrityError stays a mint collision)",
-      "why_false": "Measured on SQLite 3.51.0 against the proposed DDL: IntegrityError is raised for a NOT NULL violation too (code 1299, SQLITE_CONSTRAINT_NOTNULL), not only for a primary-key collision (code 1555, SQLITE_CONSTRAINT_PRIMARYKEY, message 'UNIQUE constraint failed: shares.id').",
-      "correction": "The real reason to omit CHECK is that a trim/length CHECK in SQL would not match Python str.strip() semantics, and blankness and length are rejected before insert. The claim that IntegrityError can only be a collision must be removed."
-    }
-  ],
-  "binding_constraints": [
-    { "id": "DB-C1", "constraint": "Implementations must close the connection in a finally block and must not commit after IntegrityError.", "rationale": "Verified on this interpreter (isolation_level='' and PRAGMA busy_timeout=5000): closing without commit rolls back the open transaction, including an earlier insert in the same transaction. The contract already requires that a failed insert leaves no readable row; the implementation has to honour it." },
-    { "id": "DB-C2", "constraint": "Keep the mint retry off an aborted transaction; do not reuse a connection whose transaction has failed.", "rationale": "One app.db.connect() per call matches SQLite's one-writer, non-shared-connection model and keeps the retry path clean." },
-    { "id": "DB-C3", "constraint": "Do not edit the migration runner in app/db.py, and do not add a second index.", "rationale": "Every predicate is id, which is the primary key; expires_at is not filtered in SQL, so a second index is not justified. One CREATE TABLE does not justify a runner change." }
-  ],
-  "blocking_design_defects": [],
-  "non_blocking_notes": [
-    { "id": "DB-N1", "severity": "medium", "note": "sqlite3.IntegrityError is not only a primary-key collision. Mapping every IntegrityError to UniqueViolation retries a NOT NULL failure as if it were a mint collision. On this schema that still ends as PersistenceError after five attempts with no row committed, so store stays fail-closed and this is not a revise. If the contract is tightened, raise UniqueViolation only for sqlite_errorcode == 1555 and PersistenceError for 1299. Do not match the message text 'PRIMARY KEY': the collision text is 'UNIQUE constraint failed'.", "evidence": "Measured on SQLite 3.51.0 with an in-memory table of the proposed DDL, not by applying 0002." },
-    { "id": "DB-N2", "severity": "medium", "note": "id TEXT PRIMARY KEY does not mean NOT NULL here. SQLite allows NULL in a non-INTEGER primary key unless the column is also NOT NULL, the table is STRICT, or it is WITHOUT ROWID. Two NULL ids were stored, and 'WHERE id = ?' with None matched neither row, so those rows are invisible to the designed select and delete. The mint path never passes NULL, so this is latent. The durable form, if the DDL is edited, is id TEXT PRIMARY KEY NOT NULL.", "evidence": "Measured on SQLite 3.51.0: NULL id produced no error; '' for body was accepted, so NOT NULL does not encode the blank-text rule." },
-    { "id": "DB-N3", "severity": "low", "note": "No CHECK is agreed, for a different reason than design.json states (see design_corrections_required). A length CHECK is unnecessary while length and blankness are rejected before insert." },
-    { "id": "DB-N4", "severity": "low", "note": "Expired rows can remain. Accepted by the design: no sweeper, and reclamation only on a later read or delete. Untouched expired rows are not deleted, and that does not make a read return the text." },
-    { "id": "DB-N5", "severity": "low", "note": "executescript in app/db.py commits before the script runs, so a crash between CREATE TABLE and the version insert is a pre-existing runner window. The plan forbids editing that runner; one CREATE TABLE does not justify a runner change." }
-  ],
-  "not_reviewed": [
-    { "item": "Query plan for the three statements", "reason": "not_assessed: the table does not exist and no EXPLAIN was run. Whether the planner uses the primary key is unverified." },
-    { "item": "Lock duration and down-migration execution", "reason": "not_measured / not_run. No lock timing was taken and the DROP TABLE rollback was not executed." },
-    { "item": "Row counts against a real shares table", "reason": "not_run: the table was not created, because the migration is the implementation's step 1." }
-  ]
+    "task_id": "TASK-001",
+    "role": "database",
+    "phase": "design",
+    "verdict": "PASS",
+    "summary": "The proposed table, the three point statements, the primary-key-only index, and one connection with a commit per successful insert or delete can express the requirements. Nothing here is a critical or high design defect. db-report.json was not written, and the migration was not created or applied.",
+    "artifacts_reviewed": [
+        "design.json",
+        "plan.json"
+    ],
+    "backfilled": {
+        "reason": "This consultation was performed and delivered, and no artifact existed to record it: the framework had no artifact for a design-time specialist consultation, so the review survived only as a message. The consulting specialist did not write this file; it was reconstructed from that specialist's delivered output under explicit human authorisation, and it must not be read as evidence that the specialist wrote it.",
+        "authorised_by": "human"
+    },
+    "design_corrections_required": [
+        {
+            "where": "design.json data_model.migration_notes",
+            "claim": "no CHECK (so IntegrityError stays a mint collision)",
+            "why_false": "Measured on SQLite 3.51.0 against the proposed DDL: IntegrityError is raised for a NOT NULL violation too (code 1299, SQLITE_CONSTRAINT_NOTNULL), not only for a primary-key collision (code 1555, SQLITE_CONSTRAINT_PRIMARYKEY, message 'UNIQUE constraint failed: shares.id').",
+            "correction": "The real reason to omit CHECK is that a trim/length CHECK in SQL would not match Python str.strip() semantics, and blankness and length are rejected before insert. The claim that IntegrityError can only be a collision must be removed."
+        }
+    ],
+    "binding_constraints": [
+        {
+            "id": "DB-C1",
+            "constraint": "Implementations must close the connection in a finally block and must not commit after IntegrityError.",
+            "rationale": "Verified on this interpreter (isolation_level='' and PRAGMA busy_timeout=5000): closing without commit rolls back the open transaction, including an earlier insert in the same transaction. The contract already requires that a failed insert leaves no readable row; the implementation has to honour it."
+        },
+        {
+            "id": "DB-C2",
+            "constraint": "Keep the mint retry off an aborted transaction; do not reuse a connection whose transaction has failed.",
+            "rationale": "One app.db.connect() per call matches SQLite's one-writer, non-shared-connection model and keeps the retry path clean."
+        },
+        {
+            "id": "DB-C3",
+            "constraint": "Do not edit the migration runner in app/db.py, and do not add a second index.",
+            "rationale": "Every predicate is id, which is the primary key; expires_at is not filtered in SQL, so a second index is not justified. One CREATE TABLE does not justify a runner change."
+        }
+    ],
+    "blocking_design_defects": [],
+    "non_blocking_notes": [
+        {
+            "id": "DB-N1",
+            "severity": "medium",
+            "note": "sqlite3.IntegrityError is not only a primary-key collision. Mapping every IntegrityError to UniqueViolation retries a NOT NULL failure as if it were a mint collision. On this schema that still ends as PersistenceError after five attempts with no row committed, so store stays fail-closed and this is not a revise. If the contract is tightened, raise UniqueViolation only for sqlite_errorcode == 1555 and PersistenceError for 1299. Do not match the message text 'PRIMARY KEY': the collision text is 'UNIQUE constraint failed'.",
+            "evidence": "Measured on SQLite 3.51.0 with an in-memory table of the proposed DDL, not by applying 0002."
+        },
+        {
+            "id": "DB-N2",
+            "severity": "medium",
+            "note": "id TEXT PRIMARY KEY does not mean NOT NULL here. SQLite allows NULL in a non-INTEGER primary key unless the column is also NOT NULL, the table is STRICT, or it is WITHOUT ROWID. Two NULL ids were stored, and 'WHERE id = ?' with None matched neither row, so those rows are invisible to the designed select and delete. The mint path never passes NULL, so this is latent. The durable form, if the DDL is edited, is id TEXT PRIMARY KEY NOT NULL.",
+            "evidence": "Measured on SQLite 3.51.0: NULL id produced no error; '' for body was accepted, so NOT NULL does not encode the blank-text rule."
+        },
+        {
+            "id": "DB-N3",
+            "severity": "low",
+            "note": "No CHECK is agreed, for a different reason than design.json states (see design_corrections_required). A length CHECK is unnecessary while length and blankness are rejected before insert."
+        },
+        {
+            "id": "DB-N4",
+            "severity": "low",
+            "note": "Expired rows can remain. Accepted by the design: no sweeper, and reclamation only on a later read or delete. Untouched expired rows are not deleted, and that does not make a read return the text."
+        },
+        {
+            "id": "DB-N5",
+            "severity": "low",
+            "note": "executescript in app/db.py commits before the script runs, so a crash between CREATE TABLE and the version insert is a pre-existing runner window. The plan forbids editing that runner; one CREATE TABLE does not justify a runner change."
+        }
+    ],
+    "not_reviewed": [
+        {
+            "item": "Query plan for the three statements",
+            "reason": "not_assessed: the table does not exist and no EXPLAIN was run. Whether the planner uses the primary key is unverified."
+        },
+        {
+            "item": "Lock duration and down-migration execution",
+            "reason": "not_measured / not_run. No lock timing was taken and the DROP TABLE rollback was not executed."
+        },
+        {
+            "item": "Row counts against a real shares table",
+            "reason": "not_run: the table was not created, because the migration is the implementation's step 1."
+        }
+    ]
 }
