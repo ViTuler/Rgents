@@ -68,6 +68,9 @@ test; note explicitly where you had to mock and what that leaves unverified.
 - `tests`: counts of run/passed/failed plus the exact commands
 - `not_verified`: everything you could not verify, and why
 - `environment`: how the tests were run
+- `validate_log_ids`: UUIDs of `tasks/<TASK-ID>/logs/validate-*.json` produced by
+  `python .agent/tools/validate.py --stage ...` that you relied on (C4). A PASS without at least one
+  citing a successful log is rejected.
 
 **Verdict rule**: `PASS` requires every criterion at `PASS` or an explicitly justified `NOT VERIFIED`
 accepted by the orchestrator, and no unresolved `critical`/`major` finding.

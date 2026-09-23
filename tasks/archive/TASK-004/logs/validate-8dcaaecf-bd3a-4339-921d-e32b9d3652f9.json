@@ -1,0 +1,16 @@
+{
+  "uuid": "8dcaaecf-bd3a-4339-921d-e32b9d3652f9",
+  "task_id": "TASK-004",
+  "stage": "duplicate_check",
+  "exit_code": 0,
+  "error_count": 0,
+  "warning_count": 2,
+  "created_at": "2026-09-22T04:01:54Z",
+  "git_head": "7488bf99c5b5f43d5426609d6096e9d22ae4e680",
+  "artifacts": {
+    "design.json": "877ca7d91d2a110b9274091219a20496ff83da6dfa3dfe2a8b89267668bd77f5",
+    "intake.json": "7ad0e08f8700146446d91b27552915bb8d3eba4ce481d8f50bf3f3f273471196",
+    "plan.json": "026715bb528c3626f41e17a8597c392114544487b455724974ca8f8eb5535ad4",
+    "requirements.json": "4a01b2b5734c1e88f280ffa0f83b61843f75d6d5b02240b7610472f7d462c5da"
+  }
+}

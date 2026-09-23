@@ -53,7 +53,10 @@ Write `requirements.json` matching `.agent/schemas/requirements.schema.json`.
 - Does not design database schemas
 - Does not choose frameworks, libraries, or languages
 - Does not decide API architecture, transport, or interface shape
-- Does not write implementation code
+- Does not write or modify **application / business source code** (for example under `src/`,
+  product packages, or app routes). Product writes only `requirements.json` and may propose copy
+  that the developer applies
+- Does not write implementation code of any kind
 - Does not estimate engineering effort or assign tasks
 - Does not accept its own acceptance criteria on behalf of QA — QA owns functional verification
 - Does not perform code review or approve engineering quality

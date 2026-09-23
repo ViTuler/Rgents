@@ -35,7 +35,7 @@ Multi-agent coding teams fail in predictable ways:
 ## Quick start
 
 ```bash
-# 1. Prove the gates actually fire — 17 canaries, zero dependencies, Python 3.8+
+# 1. Prove the gates actually fire — canaries in validate.py --selftest, zero dependencies, Python 3.8+
 python .agent/tools/validate.py --selftest
 
 # 2. Confirm the team's own configuration is consistent
@@ -81,8 +81,10 @@ A framework that cannot demonstrate a blocked task has not demonstrated anything
 Copy `.cursor/`, `.agent/`, `docs/agents/`, `docs/knowledge/`, and `AGENTS.md` into a product
 repository. The framework is self-contained: no install, no dependencies, no build step.
 
-Then fill in `docs/knowledge/project-memory.md` — the stack, the exact commands, and the conventions
-agents would otherwise rediscover on every task.
+Then establish `.agent/project-baseline.yaml` via a **project-level** spec/design (human + product +
+tech-lead): stack, environment manager, and authoritative commands. Set `status: established`.
+`docs/knowledge/project-memory.md` may summarise the same facts for humans; it is **not** the
+machine-checked source of truth.
 
 ### Project-agnostic and path-portable
 
@@ -93,14 +95,16 @@ layout**. Three consequences, each enforced rather than promised:
 |---|---|---|
 | The project root is discovered at runtime, from the validator's own file location | `Path(__file__).resolve().parents[N]` | `root_not_derived` |
 | Relative paths resolve against the project root, **not the working directory** | so the tool behaves identically from a subdirectory, an editor task, or a CI step | `cwd_dependency` |
-| No framework file hard-codes a drive letter, a UNC share, or a home directory | the framework gets copied onto arbitrary machines | `machine_specific_path` |
+| No **framework** file hard-codes a drive letter, a UNC share, or a home directory | the framework gets copied onto arbitrary machines; **task run records under `tasks/` are exempt** (they may name the interpreter that actually ran) | `machine_specific_path` |
 
 `python .agent/tools/validate.py --check-setup` verifies all three. They are also covered by selftest
-canaries, including a negative test that plants an absolute path and asserts it is caught.
+canaries, including a negative test that plants an absolute path under `.agent/` and asserts it is
+caught, and a positive test that a path under `tasks/` is not.
 
-**Where a project-specific path is genuinely needed, take it as an argument or read it from
-configuration — never bake it in.** `.agent/config.yaml` is the single source of truth for anything
-project-shaped, which is why the routing policy lives there rather than inside the agent files.
+**Where a project-specific path is genuinely needed, take it as an argument, read it from
+configuration, or record it in a task artifact — never bake it into framework source.** `.agent/config.yaml`
+is the single source of truth for anything project-shaped in routing policy. Stack and authoritative
+commands live in `.agent/project-baseline.yaml` (structured baseline; see C6).
 
 **One caveat about the scope check.** The implementation-stage invariant compares `plan.json` against
 the real `git diff` of whatever repository the team is working in. Inside this framework repository
@@ -156,7 +160,7 @@ This framework was built after auditing two reference projects:
   topology with conclusion-level returns, and the traceability triplet (design reference + requirement
   ID + quality gate) on every task.
 
-Full audits: `Refer Doc/_refs/_audit-jahnel.md`, `Refer Doc/_refs/_audit-pridiuksson.md`.
+Full audits: `refers/_refs/_audit-jahnel.md`, `refers/_refs/_audit-pridiuksson.md`.
 
 ### Two corrections found by running it, not by reading it
 

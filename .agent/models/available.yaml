@@ -1,0 +1,12 @@
+# Machine-readable model catalog (C1). Written by init --refresh-models.
+# source: seed. Never store API keys here.
+# Orchestrator assigns Task models from ide_slug values that are dispatchable in-session.
+
+version: 1
+source: seed
+fetched_at: "2026-09-22"
+models:
+  - {"display_name": "Inherit parent session model", "id": "inherit", "ide_slug": "inherit", "notes": "Do not use for qa/reviewer/security assignments; inherit collapses the review triangle."}
+  - {"display_name": "Composer 2.5 Fast", "id": "composer-2.5-fast", "ide_slug": "composer-2.5-fast"}
+  - {"display_name": "Cursor Grok 4.6 High Fast", "id": "cursor-grok-4.6-high-fast", "ide_slug": "cursor-grok-4.6-high-fast"}
+  - {"display_name": "Grok 4.7 High Fast", "id": "grok-4.7-high-fast", "ide_slug": "grok-4.7-high-fast"}

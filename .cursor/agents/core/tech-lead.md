@@ -46,6 +46,10 @@ fewest new concepts a maintainer must learn.
   requirement — the validator treats it as an error.
 - **Declare `parallel_group`** only for genuinely independent streams (disjoint file sets, no shared
   interface under construction). Mark everything else sequential.
+- **For every multi-step `parallel_groups` entry (C2), write `streams[]`:** each stream names a
+  `step` and non-empty `claimed_paths` (must include that step's `file`). Paths across streams in
+  the same group must be pairwise disjoint; do not put `depends_on` edges between members of the
+  same group. The orchestrator will lease those paths and open a git worktree per stream.
 - **Declare `specialists_required`** with the reason, so the orchestrator can reconcile it against
   `.agent/config.yaml`. If your activation call differs from the policy, say so explicitly — do not
   silently disagree.

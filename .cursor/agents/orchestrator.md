@@ -115,10 +115,37 @@ After the tech lead writes `plan.json`, record the execution DAG:
 
 Reject a `parallel_group` that violates `.agent/config.yaml → parallelization.forbidden`.
 
+**Parallel isolation (C2).** Default remains sequential. When `plan.json` has a multi-step
+`parallel_group` with `streams[].claimed_paths`:
+
+1. `python .agent/tools/validate.py --task <ID> --stage plan` (disjoint paths must pass)
+2. For each stream: `parallel_worktree.py acquire-paths` then `add-worktree`
+3. Dispatch the developer **only against that worktree path** — never the main checkout
+4. After all streams succeed: `acquire-merge`, integrate into `rgents/<task>/integrate`, then
+   `release-merge` / `release-paths` / `remove-worktree`
+5. On merge conflict: keep the worktree, escalate to the human — do not auto-resolve
+
+Non-parallel steps continue to use the main worktree.
+
 ### 4. Dispatch
 
 Dispatch agents by their role, passing **artifact paths — never artifact contents**. Each dispatch
 states: the task ID, the artifact(s) to read, the artifact to write, and the completion condition.
+
+**Model assignments (C1).** Before the first Task dispatch on a non-trivial task, write
+`intake.json → model_assignments` using slugs from `.agent/models/available.yaml` that are also in
+the session's IDE allow-list. Pass that role's `assigned_model` as the Task `model` argument.
+Agent frontmatter may stay `model: inherit` — assignments are the audit truth. Rules:
+
+- Do **not** assign the root orchestrator (you); the human picks the main-thread model in the UI.
+- **Hard:** `qa`, `reviewer`, and (when activated) `security` must be pairwise distinct. Never use
+  `inherit` for those roles.
+- **Soft:** prefer a different model for `developer` than the review triangle.
+- If fewer than enough distinct IDE-dispatchable models exist, stop and escalate to the human
+  (`model_assignments.escalation` with `decided_by: human`); do not silently share a model.
+- Record `assigned_model` only — do not invent `executed_model`.
+- A role may override the **next** dispatch via `overridden_by` + `rationale`, but must not break
+  the triangle constraint.
 
 Dispatch **roles**, never the coordinator: `product`, `tech-lead`, `developer`, `qa`, `reviewer`, and
 the six specialists. Do not attempt to dispatch `orchestrator` — you already are it, and a project
@@ -177,7 +204,10 @@ what is blocked, what the human must decide. Never report a task as done when a 
 2. **Uncertainty escalates; it never guesses.** Escalation does not count against the retry budget.
 3. **A missing artifact is a missing gate.** Absence of evidence is not a pass.
 4. **Classification is auditable.** If you cannot justify a `trivial` classification against the
-   definitions in `.agent/config.yaml`, it is not trivial.
+   definitions in `.agent/config.yaml`, it is not trivial. **When you do classify `trivial`, stop
+   and obtain human confirmation** before implementation (or before QA on the trivial path). Record
+   `classification_confirmation: { decided_by: human, confirmed_at: ... }` in `intake.json`. Without
+   that field the validator rejects the task (`trivial_needs_human`).
 
 ## NON-GOALS
 

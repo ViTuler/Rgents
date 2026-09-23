@@ -1,0 +1,15 @@
+# Manual seed for Cursor IDE-dispatchable model slugs (C1 / manual_seed adapter).
+# Used when CURSOR_API_KEY is unset or the API list fails. Never put API keys in this file.
+# Each models[] entry is one JSON object so the zero-dependency YAML parser can load it.
+#
+# Refresh into available.yaml:
+#   python .agent/tools/init_project.py --refresh-models
+
+version: 1
+source: seed
+fetched_at: "2026-09-22"
+models:
+  - {"id": "inherit", "display_name": "Inherit parent session model", "ide_slug": "inherit", "notes": "Do not use for qa/reviewer/security assignments; inherit collapses the review triangle."}
+  - {"id": "composer-2.5-fast", "display_name": "Composer 2.5 Fast", "ide_slug": "composer-2.5-fast"}
+  - {"id": "cursor-grok-4.6-high-fast", "display_name": "Cursor Grok 4.6 High Fast", "ide_slug": "cursor-grok-4.6-high-fast"}
+  - {"id": "grok-4.7-high-fast", "display_name": "Grok 4.7 High Fast", "ide_slug": "grok-4.7-high-fast"}

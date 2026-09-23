@@ -50,6 +50,12 @@
     "review"
   ],
   "human_signoff_required": true,
+  "model_assignments": {
+    "qa": {"assigned_model": "composer-2.5-fast", "rationale": "C1 backfill for archived demo task"},
+    "reviewer": {"assigned_model": "cursor-grok-4.6-high-fast", "rationale": "C1 backfill for archived demo task"},
+    "security": {"assigned_model": "grok-4.7-high-fast", "rationale": "C1 backfill for archived demo task"},
+    "developer": {"assigned_model": "composer-2.5-fast", "rationale": "soft overlap accepted on archive backfill"}
+  },
   "parallel_groups": [],
   "open_questions": [],
   "created_at": "2026-09-20",
