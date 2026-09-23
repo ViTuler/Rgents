@@ -90,15 +90,15 @@ python .agent/tools/validate.py --check-setup
 
 # 2. 在 Cursor 中用 slash 命令驱动一个任务
 /spec    "用户应该能邀请同事加入组织"
-/design  TASK-001
-/build   TASK-001
-/verify  TASK-001
-/review-code TASK-001
-/ship    TASK-001
+/design  TASK-NNN
+/build   TASK-NNN
+/verify  TASK-NNN
+/review-code TASK-NNN
+/ship    TASK-NNN
 ```
 
 每个命令都会委派给 `orchestrator`，由它读取 `.agent/config.yaml` 决定路由、读取
-`.agent/workflows/<类型>.yaml` 决定阶段顺序。
+`.agent/workflows/<类型>.yaml` 决定阶段顺序。`tasks/active/` 平时为空；活任务做完后释放或归档。
 
 ## 生命周期
 
@@ -159,14 +159,14 @@ Agent 之间不传对话，只传 `tasks/<TASK-ID>/` 下的文件，并且**传�
 自检（`--selftest`）会用**已知有缺陷的输入**逐个触发上述每一条不变量，证明它们真的会报警，
 而不是只写在文档里。当前 17 项全部通过。
 
-## 两个示例任务
+## 示例任务
 
 | 目录 | 说明 |
 |---|---|
-| `tasks/active/TASK-001/` | 完整走通全流程的示例（邀请同事加入组织），**故意停在安全门禁未通过**——用来证明门禁真的会阻断 |
 | `tasks/completed/TASK-002/` | trivial 复杂度的示例（空状态文案），只跑 QA 就完成——用来展示分类如何削减不必要的流程 |
+| `tasks/archive/TASK-004/` | 已归档的高风险邀请功能 intake/requirements 记录（未跑完门禁），需要更完整产物形状时可对照 |
 
-对照阅读这两个任务，能最直观地看出"按风险定流程"的实际含义。
+对照阅读，能最直观地看出「按风险定流程」的实际含义。`tasks/active/` 不长期保留示例任务。
 
 ## 目录结构
 

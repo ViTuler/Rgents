@@ -48,35 +48,31 @@ Then, in Cursor, drive a task with the slash commands:
 
 ```
 /spec    "users should be able to invite teammates to their organization"
-/design  TASK-001
-/build   TASK-001
-/verify  TASK-001
-/review-code TASK-001
-/ship    TASK-001
+/design  TASK-NNN
+/build   TASK-NNN
+/verify  TASK-NNN
+/review-code TASK-NNN
+/ship    TASK-NNN
 ```
 
 Each command delegates to the orchestrator, which consults `.agent/config.yaml` for routing and
-`.agent/workflows/<type>.yaml` for the stage sequence.
+`.agent/workflows/<type>.yaml` for the stage sequence. `tasks/active/` stays empty until you open a
+live task; release or archive it when the work is done.
 
 ## Worked examples
 
-Two complete example tasks ship with the framework. Read them before writing your own artifacts —
-they make the output shapes concrete rather than described.
+One completed example ships with the framework so artifact shapes are concrete rather than described.
+`tasks/archive/TASK-004/` is an archived high-risk intake/requirements record (same invite feature,
+stopped early) if you want the fuller artifact shapes without an active blocked task.
 
 | Example | What it shows |
 |---|---|
-| `tasks/active/TASK-001/` | A full feature (`standard` complexity, `high` risk) that ran every gate. **It is deliberately left blocked** at the security gate on a missing rate limit, and the review gate correctly refused to run. Nothing passed that had not passed. |
-| `tasks/completed/TASK-002/` | A `trivial` copy change that ran only the QA gate and completed. Compare with TASK-001 to see what the classification removes: no design, no plan, no specialists, no review — because 1–2 files with no interface change needs none of them. |
+| `tasks/completed/TASK-002/` | A `trivial` copy change that ran only the QA gate and completed: no design, no plan, no specialists, no review — because 1–2 files with no interface change needs none of them. |
 
 ```bash
-# The blocked example reports its blocking gate and the gate that never ran
-python .agent/tools/validate.py --task TASK-001 --all
-
 # The completed example passes, running only the stages its classification requires
 python .agent/tools/validate.py --task TASK-002 --all
 ```
-
-A framework that cannot demonstrate a blocked task has not demonstrated anything about its gates.
 
 ## Using this as a template
 

@@ -316,7 +316,8 @@ product_decisions:
 # Duplicate task record
 #
 # The same request produced TASK-003 earlier. Neither artifact records this, which is why
-# it is written here explicitly.
+# it is written here explicitly. TASK-003 was later removed from this repository (not kept
+# as an archive directory); the adjudication below remains the historical record.
 # ---------------------------------------------------------------------------
 
 duplicate_of:
@@ -331,9 +332,9 @@ duplicate_of:
   resolution: >
     TASK-004 is canonical: its requirements came from the product role rather than from a human
     workaround, and its only defect is unresolved product decisions, which the answers above resolve.
-    TASK-003 must be archived as superseded, not left active, so two divergent requirement sets do
-    not both appear authoritative.
-  superseded_artifact: "tasks/active/TASK-003/requirements.json"
+    TASK-003 was superseded and later removed from the repository so demo tasks do not linger under
+    active/ or archive/ after the duplicate was resolved.
+  superseded_artifact: "TASK-003/requirements.json (removed from repository)"
   retained_for: "The hashed-token, atomic-consume, and uniform-error constraints in TASK-003's design assumptions are carried into derived_technical_constraints above."
   framework_gap: >
     Nothing in the pipeline detects that two active tasks describe the same request. The artifact

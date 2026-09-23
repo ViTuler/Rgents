@@ -53,8 +53,6 @@
   "updated_at": "2026-02-20",
   "overlap_check": {
     "checked_against": [
-      "TASK-001",
-      "TASK-003",
       "TASK-004"
     ],
     "method": "token_overlap",
@@ -63,7 +61,7 @@
     "decision": {
       "outcome": "no_overlap",
       "decided_by": "orchestrator",
-      "rationale": "No task reached the possible threshold. The highest score was 0.0096 against TASK-004, from a single incidental shared term. This request corrects empty-state copy on the projects list and shares no subject matter with any invitation task in the repository."
+      "rationale": "No task reached the possible threshold. The highest score was 0.0096 against TASK-004, from a single incidental shared term. This request corrects empty-state copy on the projects list and shares no subject matter with the archived invitation task."
     }
   }
 }

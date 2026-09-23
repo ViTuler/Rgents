@@ -110,10 +110,10 @@
       "outcome": "supersede",
       "decided_by": "human",
       "superseded_task_id": "TASK-003",
-      "rationale": "TASK-003 and TASK-004 were created from the same request. The narrow comparison scores them 1.0, which is a verbatim restatement. TASK-004 is kept as canonical because its requirements were produced by the product role through the normal stage, whereas TASK-003's were authored directly by the human as a workaround after the product agent could not write. TASK-001 is the same feature and is deliberately left active: it is the worked example that ships with the framework, and superseding it would leave TASK-001, TASK-003 and TASK-004 all archived for one request."
+      "rationale": "TASK-003 and TASK-004 were created from the same request. The narrow comparison scores them 1.0, which is a verbatim restatement. TASK-004 is kept as canonical because its requirements were produced by the product role through the normal stage, whereas TASK-003's were authored directly by the human as a workaround after the product agent could not write. At the time, TASK-001 was left as a blocked worked example; TASK-001 and TASK-003 were later removed from this repository so active/ does not retain demo tasks."
     },
     "override": {
-      "reason": "TASK-001 is retained on purpose. It is the framework's worked example, not competitive work: it exists to show the artifact shapes, and it is intentionally left blocked at the security gate. Treating it as a live duplicate would archive the only complete end-to-end example in the repository.",
+      "reason": "At adjudication time TASK-001 was retained as the framework's blocked worked example (false_positive vs competitive duplicate). TASK-001 and TASK-003 were subsequently removed from the repository; only this archived TASK-004 record remains for the invite feature.",
       "kind": "false_positive"
     }
   }

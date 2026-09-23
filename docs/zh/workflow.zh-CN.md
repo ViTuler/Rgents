@@ -294,7 +294,7 @@ qa → security → performance → ux → database → data → review → devo
 
 **问题**：流水线原有的不变量都是"任务对自己"的检查（计划 vs 自己的 diff）。**没有任何检查能发现两个
 active 任务在描述同一需求**——结果是两套分歧的需求都看起来权威。这个缺口是真实发生过的：
-TASK-003 和 TASK-004 由同一句请求创建，谁都没发现。
+历史上 TASK-003 与 TASK-004 由同一句请求创建（两任务均已从本仓库示例中移除或归档），当时谁都没发现。
 
 **做法**：在分配任务 ID 之前，把请求与每个 active 任务比对，结果写进 `intake.json → overlap_check`。
 
@@ -310,7 +310,7 @@ TASK-003 和 TASK-004 由同一句请求创建，谁都没发现。
 
 ### 阈值是实测校准的，不是拍的
 
-以本仓库三个任务为样本，**应用停用词与别名之后**的实测值：
+以本仓库早期示例任务为样本（TASK-001 / TASK-003 已从仓库移除，数字仍作阈值校准依据），**应用停用词与别名之后**的实测值：
 
 ```
 TASK-004 vs TASK-003  同一请求，逐字重述     1.0000   (narrow)
@@ -506,18 +506,15 @@ python .agent/tools/validate.py --selftest
 python .agent/tools/validate.py --check-setup
 
 # 校验单个产物
-python .agent/tools/validate.py --artifact tasks/active/TASK-001/plan.json
+python .agent/tools/validate.py --artifact tasks/completed/TASK-002/qa-report.json
 
 # 校验某个阶段的不变量
-python .agent/tools/validate.py --task TASK-001 --stage duplicate_check
-python .agent/tools/validate.py --task TASK-001 --stage plan
-python .agent/tools/validate.py --task TASK-001 --stage implementation
-python .agent/tools/validate.py --task TASK-001 --stage qa
-python .agent/tools/validate.py --task TASK-001 --stage review
-python .agent/tools/validate.py --task TASK-001 --stage completion
+python .agent/tools/validate.py --task TASK-002 --stage duplicate_check
+python .agent/tools/validate.py --task TASK-002 --stage qa
+python .agent/tools/validate.py --task TASK-002 --stage completion
 
 # 跑该任务适用的全部阶段（按分类自动跳过不适用的阶段）
-python .agent/tools/validate.py --task TASK-001 --all
+python .agent/tools/validate.py --task TASK-002 --all
 ```
 
 退出码：`0` 全部通过（允许 warning）；`1` 有 error（门禁未通过）；`2` 环境错误（路径、文件、JSON 问题）。

@@ -4,7 +4,7 @@
     "authorship": {
         "written_by": "human",
         "reason": "The product agent could not be dispatched: the orchestrator subagent type was unavailable in the session, so no agent could reach the specification stage. The eight product decisions recorded in task.yaml under product_decisions are the human's own answers; this file folds them into acceptance criteria, business rules and edge cases. No decision here was invented by the author.",
-        "supersedes": "tasks/active/TASK-003/requirements.json",
+        "supersedes": "TASK-003 (removed from this repository after the duplicate was resolved; was tasks/active/TASK-003/requirements.json)",
         "review_recommended": true
     },
     "actors": [

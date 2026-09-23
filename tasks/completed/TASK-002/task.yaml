@@ -1,8 +1,8 @@
 # TASK-002 — lifecycle state and resume anchor
 #
-# A completed trivial-complexity task. Compare with tasks/active/TASK-001/ to see how much process
-# the classification removes: no design, no plan, no specialists, and no review gate, because a
-# copy change in one file with no interface change genuinely needs none of them.
+# A completed trivial-complexity task. It shows how much process the classification removes:
+# no design, no plan, no specialists, and no review gate, because a copy change in one file
+# with no interface change genuinely needs none of them.
 #
 # This is a record of a completed task, so all gates that were required have passed.
 
