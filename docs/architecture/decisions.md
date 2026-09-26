@@ -135,7 +135,7 @@ breaks a downstream gate; free-form nuance must be forced into fields.
 
 - **Status:** accepted
 - **Date:** 2026-09-22（收束 / 版本 2026-09-23）
-- **Framework release:** **1.0.0**
+- **Framework release:** **1.0.0**（收束时）；后续补丁见 **1.0.1**（`CHANGELOG.md`：S1–S7、KI-005、C1 agent_cli）
 - **Task:** correction backlog (batches A–D + N2/N3; main-thread bypass)
 - **Deciders:** human owner
 - **Closure:** 第一次设计修正结束；版本标记为 1.0.0。验证改由新开产品项目进行。下版首项见 `next-edition-notes.md` → N1。
@@ -152,7 +152,7 @@ breaks a downstream gate; free-form nuance must be forced into fields.
 
 **Easier:** 信任根与并行语义可机械执行；新项目可本地 git + 基线 + 模型目录；并行步有 path lease + worktree。
 
-**Harder:** 治理面与 validate 变更面大；C1 依赖 API Key 或种子；C2 增加 worktree/锁运维。
+**Harder:** 治理面与 validate 变更面大；C1 依赖 Agent CLI 登录、API Key 或种子；C2 增加 worktree/锁运维。
 
 ### Alternatives rejected
 

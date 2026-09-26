@@ -137,7 +137,7 @@ qa → security → performance → ux → database → data → review → devo
 
 | 专家 | 触发条件（节选） |
 |---|---|
-| `ux` | 新的用户界面/页面/弹窗/流程；用户可见的文案或布局；交互或状态变化 |
+| `ux` | 新的用户界面/页面/弹窗/流程；用户可见的文案或布局；交互或状态变化；为即将实现的产品 UI 写 UX 规格（`ux_specification_for_upcoming_surface`） |
 | `security` | 认证授权；用户输入到达持久化或 shell；密钥凭据；支付金融流；个人敏感数据；新外部依赖；新公开端点 |
 | `database` | 表结构变更；新增迁移；大表上的新查询；事务或隔离语义；索引或约束变更；数据回填 |
 | `performance` | 声明了延迟/吞吐预算；热路径改动；无界输入上的新循环；N+1 或全表扫描风险；大载荷或流式；引入缓存或并发 |
@@ -146,6 +146,15 @@ qa → security → performance → ux → database → data → review → devo
 
 **跳过必须记录原因。** `intake.json → skipped_specialists` 是一个 `{specialist, reason}` 数组。
 静默跳过专家是这套流水线产出"自信的错结果"最常见的方式，因此它是一个协议违规。
+
+**ux 跳过边界（S4）：**
+
+| 情况 | 动作 |
+|---|---|
+| 改产品 UI / 文案 / 交互状态 | **激活** ux，写 `ux-report.json` |
+| 任务要写 UX 规格且后续会做产品 UI（同倡议） | **激活**，trigger `ux_specification_for_upcoming_surface` |
+| 唯一交付物是 `docs/ux/*.md` 一类静态规格、本任务不做产品 UI | **跳过**，reason `ux_spec_is_the_sole_deliverable`（再出一份 ux-report 会重复） |
+| 仅改 agent/框架内部文档 | **跳过**，reason `agent_or_framework_docs_only` |
 
 ---
 
@@ -499,7 +508,7 @@ Agent 可以**读**，但绝不能**写**：
 ## 十一、校验命令速查
 
 ```bash
-# 证明不变量的确会报警（17 项 canary）
+# 证明不变量的确会报警（canary 数量以输出为准，约 50+）
 python .agent/tools/validate.py --selftest
 
 # 校验框架自身配置的一致性

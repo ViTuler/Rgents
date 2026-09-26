@@ -1,9 +1,11 @@
 # Rgents — 中文总览
 
+> **框架版本：** `1.0.1`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）
+
 一套用于 Cursor 的**多 Agent 软件开发团队**。它不是一个"角色提示词合集"，而是一个小型软件组织：
 1 个协调者、5 个核心角色、6 个按风险按需激活的专家角色，加上产物契约与**可执行的质量门禁**。
 
-英文正文位于仓库根目录（`AGENTS.md`、`README.md`）。本目录是中文配套文档，两者内容保持一致。
+本目录是中文配套文档。
 
 ## 为什么这样设计
 
@@ -22,30 +24,31 @@
 ## 团队构成
 
 ```
-                    ┌──────────────────┐
-                    │   ORCHESTRATOR   │  协调者（专家团队）
-                    │  分类·路由·门禁   │  永不实现代码
-                    └────────┬─────────┘
-                             │
-               ┌─────────────▼─────────────┐
-               │        核心团队 Core        │
-               │  product   需求             │
-               │  tech-lead 架构与任务拆解     │
-               │  developer 实现              │
-               │  qa        功能验证           │
-               │  reviewer  工程质量门禁        │
-               └─────────────┬─────────────┘
-                             │
-               ┌─────────────▼─────────────┐
-               │       专家团队 Specialists  │  按风险按需激活
-               │  ux · security · devops     │
-               │  database · data · performance
-               └───────────────────────────┘
+                      ┌──────────────────┐
+                      │   ORCHESTRATOR   │
+                      └────────┬─────────┘
+                               │
+             ┌─────────────────▼─────────────────┐
+             │            CORE TEAM              │
+             │  product                          │
+             │  tech-lead                        │
+             │  developer                        │
+             │  qa                               │
+             │  reviewer                         │
+             └─────────────────┬─────────────────┘
+                               │
+             ┌─────────────────▼─────────────────┐
+             │           SPECIALISTS             │
+             │  ux · security · devops           │
+             │  database · data · performance    │
+             └───────────────────────────────────┘
 ```
 
-**核心团队** = 每个非平凡任务都会用到的 5 个角色。
-**专家团队** = 按条件激活。**"每个任务都跑全部专家"是失效模式，不是严谨。**
-**协调者** = 不承担工程角色，也不实现代码。
+| 层级 | 成员 | 说明 |
+|---|---|---|
+| 协调者 | `orchestrator` | 分类、路由、门禁；永不实现代码 |
+| 核心团队 | `product` · `tech-lead` · `developer` · `qa` · `reviewer` | 每个非平凡任务都会用到 |
+| 专家团队 | `ux` · `security` · `devops` · `database` · `data` · `performance` | 按条件激活；全开是失效模式 |
 
 ### 协调者是根 agent，不是被派发的子代理
 
@@ -146,7 +149,8 @@ Agent 之间不传对话，只传 `tasks/<TASK-ID>/` 下的文件，并且**传�
 | 失效模式 | 检查项 |
 |---|---|
 | **两个 active 任务描述同一需求** | `overlap_check_missing` / `overlap_unrecorded` / `overlap_needs_human` / `supersede_not_archived`：intake 必须比对 active 任务；命中 `likely` 必须由**人类**裁决；裁决为 supersede 时必须真的归档 |
-| 计划与实现漂移 | `file_has_step` / `step_in_affected`：`affected_files` 与 `steps` 双向一致；`scope_extra` 对比真实 git diff |
+| 计划与实现错位 | `file_has_step` / `step_in_affected`：`affected_files` 与 `steps` 双向一致；`scope_extra` 对比真实 git diff |
+| 计划 DDL 与设计空值矛盾 | `plan_ddl_nullability`（KI-005）：plan 步骤 DDL 不得允许 design 要求非空的列存 NULL |
 | 越过失败继续往下跑 | `gate_not_passed` / `gate_not_run`：**没有产物 = 门禁没跑，绝不推断为通过** |
 | PASS 里藏着 blocker | `verdict_consistent`：`verdict == PASS` 时 `blockers`、`concerns`、失败的验收标准、未决的 critical/high 发现都必须为空 |
 | 验收标准被漏掉 | `acceptance_unmapped`（计划未覆盖）、`qa_criteria_incomplete`（QA 未给结论） |
@@ -154,10 +158,10 @@ Agent 之间不传对话，只传 `tasks/<TASK-ID>/` 下的文件，并且**传�
 | 不可逆操作没有回滚方案 | `high_risk_rollback` / `irreversible_rollback` |
 | SKIP 没有理由 | `skip_justified` |
 | 谎报"跑过了" | `not_run_reason`、`blocked_has_reason` |
-| 团队配置自身漂移 | `--check-setup`：角色注册、frontmatter 字段、必需小节、工作流引用的角色是否存在 |
+| 团队配置错误 | `--check-setup`：角色注册、frontmatter 字段、必需小节、工作流引用的角色是否存在 |
 
 自检（`--selftest`）会用**已知有缺陷的输入**逐个触发上述每一条不变量，证明它们真的会报警，
-而不是只写在文档里。当前 17 项全部通过。
+而不是只写在文档里。canary 数量随版本增长；以命令输出为准（1.0.1 量级约 50+ 项）。
 
 ## 示例任务
 
@@ -181,13 +185,17 @@ Agent 之间不传对话，只传 `tasks/<TASK-ID>/` 下的文件，并且**传�
 | `.agent/workflows/` | feature / bugfix / refactor / incident 四条工作流 |
 | `.agent/schemas/` | 产物 JSON Schema |
 | `.agent/tools/validate.py` | 零依赖校验器 |
+| `.agent/tools/archive_task.py` | `/ship` 归档（active → completed/archive） |
+| `.agent/tools/init_project.py` | 本地 git init、基线占位、`--refresh-models` |
 | `docs/agents/` | 职责矩阵、权限矩阵、协作协议 |
 | `docs/knowledge/` | 项目记忆、经验教训、已知问题 |
+| `CHANGELOG.md` | 框架版本变更记录 |
 | `tasks/` | 实际工作 |
 
 ## 继续阅读
 
+- `docs/zh/guide.zh-CN.md` — **使用说明**（种子化、日常开任务、环境确认、校验与 CI）
 - `docs/zh/roles.zh-CN.md` — 12 个角色的详细职责、边界与协作方式
 - `docs/zh/workflow.zh-CN.md` — 工作流、门禁、任务状态机与返工机制
 - `docs/agents/protocols.md` — 交接协议（英文）
-- `Refer Doc/_refs/` — 两个参考项目的完整审计报告
+- `refers/_refs/` — 两个参考项目的完整审计报告

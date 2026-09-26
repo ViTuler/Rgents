@@ -190,8 +190,14 @@ paths, retry counts, and routing decisions. Anyone — human or agent — must b
 file alone.
 
 Close a task only when every required gate has PASSed and, for `complexity: complex` or `risk: high`,
-the human has signed off. Then append any durable lesson to `docs/knowledge/lessons.yaml`
-(max 50 entries; drop the oldest when exceeded) and archive the task directory.
+the human has signed off. Before completion, run
+`python .agent/tools/validate.py --task <TASK-ID> --all` so C4 fresh-log checks can pass. Then append
+any durable lesson to `docs/knowledge/lessons.yaml` (max 50 entries; drop the oldest when exceeded) and
+**archive via** `python .agent/tools/archive_task.py <TASK-ID>` (or `--lane archive` for
+cancelled/superseded; the tool rewrites `task.yaml` `artifact_path` prefixes from `active/` to the
+destination lane). Do not report the task closed while `tasks/active/<TASK-ID>/` still exists —
+copy-without-delete leaves a residual that `resolve_task_dir` still treats as live. If delete is
+blocked, ask the human.
 
 ### 8. Human interface
 

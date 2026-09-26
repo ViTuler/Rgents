@@ -10,27 +10,57 @@ Confirm the change is deliverable, then close the task.
 
 ## Preconditions
 
-- `python .agent/tools/validate.py --task <TASK-ID> --stage review` passes.
-- Every activated gate has a passing verdict.
+- Every activated gate has a passing verdict (qa, review, and any specialists).
+- For `complex` / `high`, human sign-off is recorded before close.
 
 ## Do this
 
-1. **Adopt the `orchestrator` role yourself** by reading `.cursor/agents/orchestrator.md`, then run the
-   `delivery` stage if `devops`
-   is activated, then the `completion` stage.
+1. **Adopt the `orchestrator` role yourself** by reading `.cursor/agents/orchestrator.md`. If
+   `devops` is activated, run the `delivery` stage first (`delivery-report.json`).
 
-2. If activated, **devops** writes `delivery-report.json`: reproducible build, complete and validated
-   configuration, secret handling, migration safety, **rollback procedure**, health/readiness checks,
-   and observability of the new failure modes.
+2. **Refresh validate logs (required before completion).** Long-running tasks often lack a fresh
+   `duplicate_check` (or other) log even when gates PASSed earlier — C4 then fails completion.
+   Always run:
 
-3. Run the completion check, which requires that **every gate the task needed has an
-   artifact with a passing verdict.** A gate with no artifact has not passed — it has not run.
+   ```bash
+   python .agent/tools/validate.py --task <TASK-ID> --all
+   ```
+
+   Fix any errors. If QA cites stale `validate_log_ids`, refresh ids using the candidate uuids in the
+   error (S3), then re-run `--stage qa` and `--all` again.
+
+3. **Completion check:**
+
+   ```bash
+   python .agent/tools/validate.py --task <TASK-ID> --stage completion
+   ```
+
+   Every required gate must have a passing artifact. A gate with no artifact has not run.
 
 4. On success:
 
    - updates `task.yaml` to `completed`
    - appends any durable lesson to `docs/knowledge/lessons.yaml` (max 50 entries; drop the oldest)
-   - archives `tasks/active/<TASK-ID>/` to `tasks/completed/`
+   - **archives with the tool** (do not hand-copy then hope delete works):
+
+     ```bash
+     python .agent/tools/archive_task.py <TASK-ID>
+     # cancelled / superseded → --lane archive
+     ```
+
+     The tool also rewrites `tasks/active/…` prefixes inside `task.yaml` `artifact_path` fields to
+     `tasks/completed/…` (or `archive/`).
+
+   - **Do not report `/ship` complete** while `tasks/active/<TASK-ID>/` still exists. If deletion is
+     blocked by the environment, stop and ask the human to approve the remove; then re-run
+     `archive_task.py`. Leaving both `active/` and `completed/` is a protocol failure
+     (`archive_active_residual` on `--stage completion`).
+
+5. Re-check after archive (resolves under `completed/`):
+
+   ```bash
+   python .agent/tools/validate.py --task <TASK-ID> --stage completion
+   ```
 
 ## Human sign-off
 
@@ -43,13 +73,6 @@ Obtain explicit human approval before closing when:
 Present the human with: what changed, which gates ran and their verdicts, the rollback procedure, and
 anything deferred. Do not describe a task as done while a gate is unpassed.
 
-## Verify
-
-```bash
-python .agent/tools/validate.py --task <TASK-ID> --stage completion
-python .agent/tools/validate.py --task <TASK-ID> --all
-```
-
 ## Agents do not ship
 
 No agent merges, deploys, force pushes, or pushes to a protected branch. `/ship` confirms readiness and
@@ -57,5 +80,6 @@ closes the task; a **human** performs the merge and the deploy.
 
 ## Do not
 
+- Do not run `--stage completion` before `--all` on a task that has been sitting open (stale log trap).
 - Do not close a task on the basis that the change "looks fine" while a gate is missing.
-- Do not report a task as complete when a blocking finding remains open.
+- Do not report a task as complete when a blocking finding remains open, or while `tasks/active/<ID>/` remains.

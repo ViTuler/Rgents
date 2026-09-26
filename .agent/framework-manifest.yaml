@@ -5,7 +5,7 @@
 version: 1
 framework_id: rgents
 # Semver of this framework release. Bump when shipping changes seeded products should pull.
-release: "1.0.0"
+release: "1.0.1"
 
 # Top-level surfaces copied on create (then pruned / re-scaffolded).
 create_surfaces:
@@ -24,7 +24,6 @@ create_surfaces:
 replaceable:
   - AGENTS.md
   - .cursor/
-  - .gitignore
   - .github/workflows/
   - VERSION
   - .agent/config.yaml
@@ -34,6 +33,7 @@ replaceable:
   - .agent/models/seed.yaml
   - .agent/framework-manifest.yaml
   - .agent/tools/validate.py
+  - .agent/tools/archive_task.py
   - .agent/tools/init_project.py
   - .agent/tools/init_project.cmd
   - .agent/tools/init_project.ps1
@@ -44,7 +44,9 @@ replaceable:
   - docs/architecture/
 
 # Never overwrite on upgrade (product truth).
+# .gitignore: create still seeds a starter file; upgrade must not wipe product rules (e.g. out/).
 product_owned:
+  - .gitignore
   - .agent/project-baseline.yaml
   - .agent/seeded-from.yaml
   - .agent/models/available.yaml

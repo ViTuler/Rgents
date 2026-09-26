@@ -130,24 +130,24 @@ stages:
     agent: "orchestrator"
     result: "PASS"
     summary: "feature/standard/high; ux, security, database activated; devops, performance, data skipped with reasons"
-    artifact_path: "tasks/active/TASK-004/intake.json"
+    artifact_path: "tasks/archive/TASK-004/intake.json"
   specification:
     agent: "human (product unavailable)"
     result: "PASS"
     summary: "14 acceptance criteria, 10 business rules, 14 edge cases, 10 out-of-scope items, 4 assumptions; open_questions cleared from 8 to 0. Authored by the human because the orchestrator subagent type was unavailable, so no agent could reach this stage."
-    artifact_path: "tasks/active/TASK-004/requirements.json"
+    artifact_path: "tasks/archive/TASK-004/requirements.json"
     authorship_caveat: "human-authored; did not pass through the product role. Every decision traces to the product_decisions block in this file."
   design:
     agent: "human (tech-lead unavailable)"
     result: "PASS"
     summary: "3 endpoints, 1 new entity, 5 ADRs with rejected alternatives, 5 risks; reuses the existing role guard, membership service, mail port and error shape. No new abstraction introduced."
-    artifact_path: "tasks/active/TASK-004/design.json"
+    artifact_path: "tasks/archive/TASK-004/design.json"
     authorship_caveat: "human-authored; did not pass through the tech-lead role."
   planning:
     agent: "human (tech-lead unavailable)"
     result: "PASS"
     summary: "9 steps over 9 files; all 14 acceptance criteria mapped; 4 parallel groups declared; no irreversible steps. plan stage invariants pass (two-way file/step consistency, AC mapping complete)."
-    artifact_path: "tasks/active/TASK-004/plan.json"
+    artifact_path: "tasks/archive/TASK-004/plan.json"
     authorship_caveat: "human-authored; did not pass through the tech-lead role."
   ux:
     agent: "ux"

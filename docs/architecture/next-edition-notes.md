@@ -1,9 +1,9 @@
 # Rgents — 下版修正备忘（next edition notes）
 
 - **创建:** 2026-09-23
-- **当前框架版本:** **1.0.0**
-- **状态:** 第一次修正已收束；N2/N3 已落地；**开项仅剩 N1**（及未立项杂项）
-- **权威:** 本文档（承接 `correction-backlog.md`）
+- **当前框架版本:** **1.0.1**
+- **状态:** 第一次修正已收束；N2/N3 已落地；sandbox **S1–S7** 已合入；**KI-005** 与 **C1 agent_cli 模型刷新** 已合入（见 `CHANGELOG` 1.0.1）。**开项：** N1
+- **权威:** 本文档（承接 `correction-backlog.md` 的 1.0.0 收束）；S1–S7 见 `sandbox-e2e-fix-tasks.md`
 
 ---
 
@@ -49,3 +49,24 @@
   - `validate.py --ci-changed --base <ref>` — 仅对 diff 触及的 `tasks/active/TASK-*` 跑适用 stage 的 `--all`（形状）；completed/archive 忽略
 - **非目标:** 产品 `commands.test`、重放 `commands_run`、用 CI 代替 QA。
 - **状态:** **已落地（2026-09-23）**
+
+---
+
+## S1–S7 — Sandbox E2E 修复包（1.0.1）
+
+- **来源:** `Rgents-Sandbox` TASK-001…008 实测。
+- **权威:** [`sandbox-e2e-fix-tasks.md`](./sandbox-e2e-fix-tasks.md)
+- **S1–S7:** **已落地** — validate/config/ux/archive_task；`--selftest`；不在框架仓开 task。
+- **产品同步:** `seed_framework.py upgrade`（含 `archive_task.py`）。
+- **`.gitignore`:** 已改为 **product_owned**（create 仍播种；upgrade 不覆盖）。
+
+---
+
+## 1.0.1 后续合入（相对 1.0.0 收束）
+
+| 项 | 说明 | 状态 |
+|----|------|------|
+| **KI-005** | `stage_plan` 比对 plan DDL ↔ `design.data_model` 空值约束（`plan_ddl_nullability`） | **已落地**（2026-09-26） |
+| **C1 models** | `--refresh-models`：Agent CLI → cursor_sdk → Cloud API∪seed → seed | **已落地**（2026-09-26） |
+
+**仍开:** N1（拓扑）。

@@ -10,11 +10,16 @@ Implement the approved plan.
 
 ## Preconditions
 
-- `requirements.json`, `design.json`, and `plan.json` all exist.
-- `python .agent/tools/validate.py --task <TASK-ID> --stage plan` passes.
+- For **non-trivial** tasks: `requirements.json`, `design.json`, and `plan.json` all exist, and
+  `python .agent/tools/validate.py --task <TASK-ID> --stage plan` passes.
+- For **confirmed trivial** tasks (`complexity: trivial` with `classification_confirmation.decided_by: human`):
+  `plan.json` may be omitted (S1). Implementation is still gated on `worker-result.json`. Skip the
+  plan-stage validate; go straight to implementation after intake/requirements as the workflow requires.
 
-If the plan stage does not pass, stop and fix the plan. Implementing against a plan whose file list and
-steps disagree guarantees a scope failure at the implementation gate.
+If the plan stage applies and does not pass, stop and fix the plan. Implementing against a plan whose
+file list and steps disagree guarantees a scope failure at the implementation gate. When a plan and
+design both carry schema/DDL detail, `stage_plan` also checks nullability consistency (KI-005 /
+`plan_ddl_nullability`).
 
 ## Do this
 

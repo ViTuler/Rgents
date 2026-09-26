@@ -63,8 +63,10 @@ becomes unreliable.
 
 Source: `.cursor/agents/orchestrator.md`
 
+- **Does not implement anything, even though it runs as the root agent.** Root authority is routing
 - Does not write, edit, or delete application code, tests, or product artifacts
 - Does not write `requirements.json`, `design.json`, `plan.json`, or any report artifact — every
+- **Does not fabricate a stage because a subagent is unreachable.** If a role cannot be dispatched,
 - Does not approve work, sign off a gate, or declare quality — it records the gate owner's verdict
 - Does not override, downgrade, or waive a security, database, or DevOps blocking finding
 - Does not change requirements or architecture to make a task easier to route
@@ -78,7 +80,8 @@ Source: `.cursor/agents/core/product.md`
 - Does not design database schemas
 - Does not choose frameworks, libraries, or languages
 - Does not decide API architecture, transport, or interface shape
-- Does not write implementation code
+- Does not write or modify **application / business source code** (for example under `src/`,
+- Does not write implementation code of any kind
 - Does not estimate engineering effort or assign tasks
 - Does not accept its own acceptance criteria on behalf of QA — QA owns functional verification
 - Does not perform code review or approve engineering quality
@@ -128,7 +131,7 @@ Source: `.cursor/agents/core/qa.md`
 
 Source: `.cursor/agents/core/reviewer.md`
 
-- Does not write or modify production code, tests, or migrations
+- Does not write or modify **application / business source code**, tests, or migrations — review is
 - Does not run the verification suite in place of QA
 - Does not diagnose or fix test failures — that is QA's classification and the developer's fix
 - Does not approve its own work, and does not review a change it authored (if it authored a prototype,

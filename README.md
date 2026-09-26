@@ -1,6 +1,8 @@
 # Rgents
 
-**Version:** `1.0.0` (see `VERSION` and `.agent/framework-manifest.yaml → release`)
+**Version:** `1.0.1` (see `VERSION` and `.agent/framework-manifest.yaml → release`)
+
+[中文文档](docs/zh/README.zh-CN.md)
 
 A **multi-agent software development organization** for Cursor (and any agent runtime that reads
 `.cursor/agents/*.md` — Claude Code, Codex, and DeepSeek Harness subagents all work with the same files).
@@ -76,13 +78,23 @@ python .agent/tools/validate.py --task TASK-002 --all
 
 ## Using this as a template
 
-Copy `.cursor/`, `.agent/`, `docs/agents/`, `docs/knowledge/`, and `AGENTS.md` into a product
-repository. The framework is self-contained: no install, no dependencies, no build step.
+Prefer the seed tool from a **framework checkout** (does not leave provisioning scripts in the product):
+
+```bash
+python .agent/tools/seed_framework.py create --target <new-project-path>
+```
+
+Or copy `.cursor/`, `.agent/`, `docs/agents/`, `docs/knowledge/`, and `AGENTS.md` by hand. The framework
+is self-contained: no install, no dependencies, no build step. See `.agent/tools/README.md` and
+`docs/zh/guide.zh-CN.md`.
 
 Then establish `.agent/project-baseline.yaml` via a **project-level** spec/design (human + product +
 tech-lead): stack, environment manager, and authoritative commands. Set `status: established`.
 `docs/knowledge/project-memory.md` may summarise the same facts for humans; it is **not** the
 machine-checked source of truth.
+
+Refresh the model catalog after seed (`init_project.py --refresh-models`): prefers Cursor Agent CLI
+for the full account list; Cloud Agents API alone is a narrowed subset — see `.agent/tools/README.md`.
 
 ### Project-agnostic and path-portable
 
@@ -104,33 +116,41 @@ configuration, or record it in a task artifact — never bake it into framework 
 is the single source of truth for anything project-shaped in routing policy. Stack and authoritative
 commands live in `.agent/project-baseline.yaml` (structured baseline; see C6).
 
-**One caveat about the scope check.** The implementation-stage invariant compares `plan.json` against
-the real `git diff` of whatever repository the team is working in. Inside this framework repository
+**One caveat about the scope check.** The implementation-stage invariant compares `plan.json` (or, for
+confirmed trivial work without a plan, the paths declared in `worker-result.json`) against the real
+`git diff` of whatever repository the team is working in. Inside this framework repository
 there is no product code, so that check reports the framework's own files as out of scope — which is
 correct behavior, and the reason the check exists at all. It becomes meaningful once the team is
-working in a product repository where `plan.json` describes that repository's files.
+working in a product repository where the plan (or worker declarations) describes that repository's files.
 
 ## Layout
 
 ```
 Rgents/
 ├── AGENTS.md                    # the constitution
+├── VERSION / CHANGELOG.md       # framework release
 ├── .cursor/
 │   ├── agents/
 │   │   ├── orchestrator.md      # coordinator (specialist team)
 │   │   ├── core/                # product, tech-lead, developer, qa, reviewer
 │   │   └── specialists/         # ux, security, devops, database, data, performance
 │   ├── rules/                   # global, architecture, coding, testing, security, documentation, delivery
-│   ├── skills/                  # reusable procedures (spec, design, testing, review, security, …)
+│   ├── skills/                  # reusable procedures (testing, review, threat model, …)
 │   └── commands/                # /spec /design /build /verify /review-code /ship /triage
 ├── .agent/
 │   ├── config.yaml              # roster + routing policy (single source of truth)
 │   ├── workflows/               # feature, bugfix, refactor, incident
 │   ├── schemas/                 # artifact JSON Schemas
-│   └── tools/validate.py        # zero-dependency validator + gate checker
+│   ├── models/                  # seed.yaml + available.yaml (C1 catalog)
+│   └── tools/
+│       ├── validate.py          # zero-dependency validator + gate checker
+│       ├── archive_task.py      # /ship: active → completed|archive
+│       ├── init_project.py      # git init, baseline, --refresh-models
+│       ├── parallel_worktree.py # C2 path leases + worktrees
+│       └── seed_framework.py    # create/upgrade from a framework checkout (not copied into products)
 ├── docs/
 │   ├── agents/                  # responsibilities, permissions, protocols
-│   ├── architecture/            # overview, decisions (ADRs), conventions
+│   ├── architecture/            # overview, decisions (ADRs), conventions, correction notes
 │   ├── knowledge/               # project memory, lessons, known issues
 │   └── zh/                      # 中文使用手册
 └── tasks/
@@ -205,5 +225,6 @@ artifact; they may not apply them. See `docs/agents/protocols.md`.
 ## 中文文档
 
 - `docs/zh/README.zh-CN.md` — 团队总览与快速上手
+- `docs/zh/guide.zh-CN.md` — 使用说明（种子化、开任务、环境、校验与 CI）
 - `docs/zh/roles.zh-CN.md` — 12 个角色的职责、边界与协作方式
 - `docs/zh/workflow.zh-CN.md` — 工作流、门禁与任务状态机

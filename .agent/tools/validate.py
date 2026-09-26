@@ -48,6 +48,27 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+
+def _configure_stdio_utf8() -> None:
+    """Prefer UTF-8 on stdout/stderr.
+
+    On Windows, the console (and ``conda run``'s pipe) often defaults to a legacy
+    code page such as GBK. Printing non-ASCII from validate then raises
+    ``UnicodeEncodeError``. Reconfigure when the stream supports it; ignore failures
+    on closed/redirected handles.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconf = getattr(stream, "reconfigure", None)
+        if not callable(reconf):
+            continue
+        try:
+            reconf(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
+
+_configure_stdio_utf8()
+
 # --------------------------------------------------------------------------------------
 # Constants
 # --------------------------------------------------------------------------------------
@@ -772,9 +793,38 @@ def check_parallel_claimed_paths(plan: dict, problems: Report) -> None:
         problems.error(check_id, message, "plan.json")
 
 
+def _is_scope_exempt(path: str) -> bool:
+    return path.startswith(SCOPE_EXEMPT_PREFIXES)
+
+
+_GOVERNANCE_EXACT = frozenset({"AGENTS.md"})
+_GOVERNANCE_PREFIXES = (".agent/", ".cursor/")
+
+
+def _is_governance_path(path: str) -> bool:
+    normalized = path.replace("\\", "/")
+    if normalized in _GOVERNANCE_EXACT:
+        return True
+    return any(normalized.startswith(prefix) for prefix in _GOVERNANCE_PREFIXES)
+
+
+def worker_declared_paths(worker: dict) -> set[str]:
+    declared: set[str] = set()
+    for key in ("files_changed", "files_created", "files_deleted"):
+        for item in worker.get(key) or []:
+            if isinstance(item, str) and item.strip():
+                declared.add(item.replace("\\", "/"))
+    return declared
+
+
 def check_implementation(task_dir: Path, plan: dict, problems: Report) -> None:
-    """Compare the plan's scope against the actual working-tree diff."""
-    affected = {f for f in (plan.get("affected_files") or []) if isinstance(f, str)}
+    """Compare the plan's scope against the working-tree diff (plan-scoped).
+
+    S2: paths changed outside `affected_files` are ignored for `scope_extra` so parallel
+    uncommitted work on other tasks does not fail this gate. Unplanned edits are still
+    caught when the worker lists them, or when a planned path changes without being declared.
+    """
+    affected = {f.replace("\\", "/") for f in (plan.get("affected_files") or []) if isinstance(f, str)}
 
     changed, reason = git_changed_files(REPO_ROOT)
     if reason:
@@ -785,19 +835,9 @@ def check_implementation(task_dir: Path, plan: dict, problems: Report) -> None:
         )
         return
 
-    def is_exempt(path: str) -> bool:
-        return path.startswith(SCOPE_EXEMPT_PREFIXES)
-
-    relevant = {p for p in changed if not is_exempt(p)}
-    extra = sorted(relevant - affected)
+    relevant = {p.replace("\\", "/") for p in changed if not _is_scope_exempt(p)}
     missing = sorted(affected - relevant)
 
-    for path in extra:
-        problems.error(
-            "scope_extra",
-            f"file changed but not in plan affected_files: {path}",
-            "plan.json",
-        )
     for path in missing:
         problems.warn(
             "scope_missing",
@@ -806,22 +846,87 @@ def check_implementation(task_dir: Path, plan: dict, problems: Report) -> None:
         )
 
     worker_path = task_dir / "worker-result.json"
-    if worker_path.exists():
-        try:
-            worker = load_json(worker_path)
-        except (json.JSONDecodeError, OSError):
-            return
-        declared = set(worker.get("files_changed") or []) | set(worker.get("files_created") or [])
-        if isinstance(worker, dict):
-            undeclared = sorted(relevant - declared - {".agent", ""})
-            for path in undeclared:
-                if path not in affected:
-                    continue
-                problems.warn(
-                    "worker_underreported",
-                    f"'{path}' changed and is in the plan, but worker-result.json does not list it",
-                    "worker-result.json",
-                )
+    if not worker_path.exists():
+        return
+    try:
+        worker = load_json(worker_path)
+    except (json.JSONDecodeError, OSError):
+        return
+    if not isinstance(worker, dict):
+        return
+
+    declared = worker_declared_paths(worker)
+    for path in sorted(declared - affected):
+        if _is_scope_exempt(path):
+            continue
+        problems.error(
+            "scope_extra",
+            f"worker-result lists '{path}' but it is not in plan affected_files",
+            "worker-result.json",
+        )
+
+    for path in sorted((relevant & affected) - declared):
+        problems.warn(
+            "worker_underreported",
+            f"'{path}' changed and is in the plan, but worker-result.json does not list it",
+            "worker-result.json",
+        )
+
+
+def check_implementation_trivial_no_plan(task_dir: Path, problems: Report) -> None:
+    """S1: trivial + human-confirmed may omit plan.json; scope is worker-result declarations."""
+    worker_path = task_dir / "worker-result.json"
+    try:
+        worker = load_json(worker_path)
+    except (json.JSONDecodeError, OSError) as exc:
+        problems.error(
+            "worker_result_unreadable",
+            f"worker-result.json could not be read: {exc}",
+            "worker-result.json",
+        )
+        return
+    if not isinstance(worker, dict):
+        problems.error("worker_result_shape", "worker-result.json must be an object", "worker-result.json")
+        return
+
+    declared = worker_declared_paths(worker)
+    if not declared:
+        problems.error(
+            "trivial_scope_empty",
+            "trivial implementation without plan.json must declare at least one path in "
+            "files_changed / files_created / files_deleted",
+            "worker-result.json",
+        )
+        return
+
+    for path in sorted(declared):
+        if _is_governance_path(path):
+            problems.error(
+                "trivial_governance_edit",
+                f"trivial worker-result must not touch governance surface: {path}",
+                "worker-result.json",
+            )
+
+    changed, reason = git_changed_files(REPO_ROOT)
+    if reason:
+        problems.warn(
+            "scope_check_skipped",
+            f"cannot verify implementation scope ({reason}). Treat scope as unverified.",
+            "worker-result.json",
+        )
+        return
+
+    # Declared paths must appear in the working-tree change set. Do not drop
+    # SCOPE_EXEMPT paths here — docs/knowledge/ is exempt from *undeclared dirt*
+    # (S2 / KI-006), but a trivial task whose only deliverable is knowledge must
+    # still prove that file actually changed.
+    changed_norm = {p.replace("\\", "/") for p in changed}
+    for path in sorted(declared - changed_norm):
+        problems.warn(
+            "scope_missing",
+            f"declared file has no working-tree change: {path}",
+            "worker-result.json",
+        )
 
 
 def check_requirements(requirements: dict, problems: Report) -> None:
@@ -856,6 +961,196 @@ def check_plan_covers_requirements(plan: dict, requirements: dict, problems: Rep
             f"plan maps acceptance criterion {criterion_id}, which is not in requirements.json",
             "plan.json",
         )
+
+
+# SQL types we recognize when scanning plan step DDL prose (KI-005).
+_DDL_SQL_TYPE = (
+    r"TEXT|INTEGER|INT|REAL|BLOB|NUMERIC|UUID|CITEXT|TIMESTAMPTZ|TIMESTAMP|"
+    r"DATE|BOOLEAN|BOOL|VARCHAR(?:\(\d+\))?|CHAR(?:\(\d+\))?|SERIAL|BIGSERIAL|"
+    r"BIGINT|SMALLINT|DOUBLE(?:\s+PRECISION)?|FLOAT|JSON|JSONB"
+)
+_DDL_COL_DEF_RE = re.compile(
+    rf"(?is)\b([a-z_][a-z0-9_]*)\s+({_DDL_SQL_TYPE})\b"
+    rf"((?:\s+(?:CONSTRAINT\s+\w+\s+)?"
+    rf"(?:PRIMARY\s+KEY|NOT\s+NULL|NULL|UNIQUE|"
+    rf"DEFAULT\s+(?:'[^']*'|\S+)|"
+    rf"REFERENCES\s+[a-z_][a-z0-9_]*(?:\s*\([^)]*\))?|"
+    rf"CHECK\s*\([^)]*\)))*)"
+)
+_DDL_CREATE_TABLE_RE = re.compile(
+    r"(?is)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\"`]?[a-z_][a-z0-9_]*[\"`]?)\s*\(",
+)
+_DDL_INTEGER_PK_TYPES = frozenset(
+    {"INTEGER", "INT", "SERIAL", "BIGSERIAL", "SMALLINT", "BIGINT"}
+)
+
+
+def _normalize_entity_name(name: str) -> str:
+    """Fold Invitation / invitations / invitation onto one token for table↔entity match."""
+    token = re.sub(r"[^a-z0-9]", "", name.lower())
+    if token.endswith("ies") and len(token) > 3:
+        return token[:-3] + "y"
+    if token.endswith("s") and len(token) > 2:
+        return token[:-1]
+    return token
+
+
+def _design_field_requires_not_null(field: dict) -> bool:
+    if field.get("nullable") is False:
+        return True
+    constraints = field.get("constraints") or []
+    joined = " ".join(str(item).lower() for item in constraints)
+    return "not null" in joined or "primary key" in joined
+
+
+def _ddl_column_enforces_not_null(type_name: str, qualifiers: str) -> bool:
+    """Whether a column clause forbids NULL.
+
+    PRIMARY KEY alone is *not* enough for TEXT/UUID/etc. — SQLite still stores NULL in
+    `id TEXT PRIMARY KEY` (KI-005). INTEGER PRIMARY KEY / SERIAL families do forbid NULL.
+    """
+    quals = qualifiers.upper()
+    if re.search(r"\bNOT\s+NULL\b", quals):
+        return True
+    if re.search(r"(?<!\bNOT\s)\bNULL\b", quals):
+        return False
+    type_key = re.sub(r"\s+", " ", type_name.upper()).split("(", 1)[0].strip()
+    if type_key in _DDL_INTEGER_PK_TYPES and re.search(r"\bPRIMARY\s+KEY\b", quals):
+        return True
+    return False
+
+
+def _extract_create_table_body(sql_text: str, open_paren_index: int) -> str:
+    """Return the balanced (...) body starting at open_paren_index, or '' if unbalanced."""
+    depth = 0
+    for index in range(open_paren_index, len(sql_text)):
+        char = sql_text[index]
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return sql_text[open_paren_index + 1 : index]
+    return ""
+
+
+def _iter_plan_ddl_snippets(plan: dict) -> list[tuple[object, str]]:
+    """Collect (step order, text) pairs that look like DDL from plan steps."""
+    snippets: list[tuple[object, str]] = []
+    for step in plan.get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        chunks: list[str] = []
+        for key in ("description_sql", "ddl", "sql", "description"):
+            value = step.get(key)
+            if isinstance(value, str) and value.strip():
+                chunks.append(value)
+        if not chunks:
+            continue
+        text = "\n".join(chunks)
+        if not re.search(
+            r"(?i)CREATE\s+TABLE|\bPRIMARY\s+KEY\b|\bNOT\s+NULL\b|"
+            rf"\b(?:{_DDL_SQL_TYPE})\b",
+            text,
+        ):
+            continue
+        snippets.append((step.get("order"), text))
+    return snippets
+
+
+def _parse_ddl_columns(sql_text: str) -> list[tuple[str | None, str, str, str]]:
+    """Return list of (table_or_none, column, type, qualifiers) from DDL-looking text."""
+    found: list[tuple[str | None, str, str, str]] = []
+    for match in _DDL_CREATE_TABLE_RE.finditer(sql_text):
+        table = match.group(1).strip("\"`")
+        body = _extract_create_table_body(sql_text, match.end() - 1)
+        if not body:
+            continue
+        for col in _DDL_COL_DEF_RE.finditer(body):
+            found.append((table, col.group(1), col.group(2), col.group(3) or ""))
+    if found:
+        return found
+    # No CREATE TABLE — still catch inline defs like `id TEXT PRIMARY KEY` in description_sql.
+    for col in _DDL_COL_DEF_RE.finditer(sql_text):
+        found.append((None, col.group(1), col.group(2), col.group(3) or ""))
+    return found
+
+
+def check_plan_ddl_against_design(plan: dict, design: dict, problems: Report) -> None:
+    """Reject plan DDL that contradicts design.data_model nullability (KI-005).
+
+    The measured failure mode: design required `id` NOT NULL / primary key, while the plan's
+    `description_sql` said `id TEXT PRIMARY KEY`. In SQLite that still accepts NULL ids, so
+    rows become invisible to `WHERE id = ?`. PRIMARY KEY without NOT NULL is therefore an
+    error for non-integer types when the design forbids nulls.
+    """
+    entities = (design.get("data_model") or {}).get("entities") or []
+    if not isinstance(entities, list) or not entities:
+        return
+
+    by_entity: dict[str, dict[str, dict]] = {}
+    by_field: dict[str, list[tuple[str, dict]]] = {}
+    for entity in entities:
+        if not isinstance(entity, dict):
+            continue
+        entity_name = entity.get("name")
+        if not isinstance(entity_name, str) or not entity_name.strip():
+            continue
+        entity_key = _normalize_entity_name(entity_name)
+        fields_map: dict[str, dict] = {}
+        for field in entity.get("fields") or []:
+            if not isinstance(field, dict):
+                continue
+            field_name = field.get("name")
+            if not isinstance(field_name, str) or not field_name.strip():
+                continue
+            key = field_name.lower()
+            fields_map[key] = field
+            by_field.setdefault(key, []).append((entity_name, field))
+        by_entity[entity_key] = fields_map
+
+    if not by_entity:
+        return
+
+    for step_order, snippet in _iter_plan_ddl_snippets(plan):
+        for table, column, type_name, quals in _parse_ddl_columns(snippet):
+            column_key = column.lower()
+            design_field: dict | None = None
+            entity_label = "?"
+            if table is not None:
+                fields_map = by_entity.get(_normalize_entity_name(table))
+                if fields_map is not None and column_key in fields_map:
+                    design_field = fields_map[column_key]
+                    entity_label = table
+            if design_field is None:
+                candidates = by_field.get(column_key) or []
+                if len(candidates) == 1:
+                    entity_label, design_field = candidates[0]
+                elif candidates:
+                    # Same column name, disagreeing nullability → only flag when all require NOT NULL
+                    # and the DDL fails; otherwise skip to avoid cross-entity false positives.
+                    if not all(_design_field_requires_not_null(field) for _, field in candidates):
+                        continue
+                    design_field = candidates[0][1]
+                    entity_label = ",".join(name for name, _ in candidates)
+                else:
+                    continue
+
+            if not _design_field_requires_not_null(design_field):
+                continue
+            if _ddl_column_enforces_not_null(type_name, quals):
+                continue
+
+            clause = f"{column} {type_name}{quals}".strip()
+            problems.error(
+                "plan_ddl_nullability",
+                f"step {step_order}: plan DDL {clause!r} allows NULL, but design "
+                f"data_model entity {entity_label!r} field {column!r} requires NOT NULL "
+                f"(nullable:false and/or primary-key / not-null constraint). "
+                f"PRIMARY KEY alone does not forbid NULL for non-integer types in SQLite — "
+                f"add NOT NULL (KI-005).",
+                "plan.json",
+            )
 
 
 def check_design_time_consultation(task_dir: Path, plan: dict, problems: Report) -> None:
@@ -1037,8 +1332,13 @@ def _decode_scalar(raw: str) -> object:
     raw = raw.strip()
     if not raw:
         return ""
+    candidate = raw
+    # Multiline flow objects in seed/available historically use trailing commas, which
+    # strict JSON rejects. Strip `,}` / `,]` so those entries become real dicts/lists.
+    if candidate[:1] in ("{", "["):
+        candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
     try:
-        return json.loads(raw)
+        return json.loads(candidate)
     except (json.JSONDecodeError, ValueError):
         return raw.strip("'\"")
 
@@ -1078,8 +1378,24 @@ def _parse_yaml_block(blocks: list[tuple[int, str]], index: int, indent: int):
             line_indent, content = blocks[index]
             if line_indent != indent or not content.startswith("- "):
                 break
-            items.append(_decode_scalar(content[2:]))
+            raw = content[2:].strip()
             index += 1
+            # Multi-line flow collections on list items: `- {` / `- [` continued on
+            # following deeper-indented lines (seed.yaml historically used this shape).
+            if raw[:1] in ("[", "{"):
+                needed = {"[": "]", "{": "}"}[raw[:1]]
+                pieces = [raw]
+                while needed not in "".join(pieces) and index < len(blocks):
+                    next_indent, candidate = blocks[index]
+                    if next_indent <= line_indent and candidate.startswith("- "):
+                        break
+                    if next_indent < line_indent:
+                        break
+                    pieces.append(candidate)
+                    index += 1
+                items.append(_decode_scalar(" ".join(pieces)))
+            else:
+                items.append(_decode_scalar(raw))
         return items, index
 
     mapping: dict = {}
@@ -1424,21 +1740,33 @@ def stage_duplicate_check(task_dir: Path, problems: Report) -> None:
                 "intake.json",
             )
 
-    has_likely = any(isinstance(m, dict) and m.get("level") == "likely" for m in recorded)
+    has_likely_active = False
+    for entry in recorded:
+        if not isinstance(entry, dict) or entry.get("level") != "likely":
+            continue
+        other_id = entry.get("task_id")
+        if isinstance(other_id, str) and (REPO_ROOT / "tasks" / "active" / other_id).is_dir():
+            has_likely_active = True
+            break
     decision = overlap.get("decision") or {}
     outcome = decision.get("outcome")
     decided_by = decision.get("decided_by")
     override = overlap.get("override")
 
-    # 4. A likely overlap requires a human decision, not the orchestrator's.
-    if has_likely and outcome != "no_overlap" and decided_by != "human":
+    # 4. A likely overlap with an ACTIVE task requires a human decision, not the orchestrator's.
+    #    S5: likely similarity to completed/archive work is informational — re-asking for shipped
+    #    work is not a live collision, so orchestrator may record outcome=new without human
+    #    adjudication (rationale still required when recorded matches exist — see step 5).
+    if has_likely_active and outcome != "no_overlap" and decided_by != "human":
         if not isinstance(override, dict):
             problems.error(
                 "overlap_needs_human",
-                f"a likely overlap was found but decision.decided_by is {decided_by!r}. "
-                "The orchestrator may run the comparison but may not adjudicate a likely match: "
-                "choosing 'new' silently forks the work and choosing 'reuse' discards the requester's "
-                "intent. Escalate to the human, or record an override with a reason.",
+                f"a likely overlap with an active task was found but decision.decided_by is "
+                f"{decided_by!r}. The orchestrator may run the comparison but may not adjudicate "
+                "a likely match against active work: choosing 'new' silently forks the work and "
+                "choosing 'reuse' discards the requester's intent. Escalate to the human, or "
+                "record an override with a reason. (Likely matches against completed/archive "
+                "alone do not require human adjudication.)",
                 "intake.json",
             )
 
@@ -1836,6 +2164,37 @@ def log_hashes_match(log: dict, current: dict[str, str], ignore_keys: set[str] |
     return True
 
 
+def fresh_validate_log_candidates(
+    task_dir: Path,
+    *,
+    ignore_keys: set[str] | None = None,
+) -> list[str]:
+    """Return uuids of exit_code-0 logs whose artifact hashes still match disk (S3 hint)."""
+    current = task_artifact_hashes(task_dir)
+    skip = ignore_keys if ignore_keys is not None else {"qa-report.json"}
+    preferred = ("implementation", "duplicate_check", "plan", "qa", "review")
+    ranked: list[tuple[int, str]] = []
+    for log in load_validate_logs(task_dir):
+        if log.get("exit_code") != 0:
+            continue
+        log_id = log.get("uuid")
+        if not isinstance(log_id, str) or not log_id:
+            continue
+        if not log_hashes_match(log, current, ignore_keys=skip):
+            continue
+        stage = log.get("stage") if isinstance(log.get("stage"), str) else ""
+        rank = preferred.index(stage) if stage in preferred else len(preferred)
+        ranked.append((rank, log_id))
+    ranked.sort()
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for _rank, log_id in ranked:
+        if log_id not in seen:
+            seen.add(log_id)
+            ordered.append(log_id)
+    return ordered
+
+
 def check_validate_log_citations(qa: dict, task_dir: Path, problems: Report) -> None:
     """C4: a QA PASS must cite at least one successful validate log by uuid."""
     if qa.get("verdict") != "PASS":
@@ -1870,9 +2229,23 @@ def check_validate_log_citations(qa: dict, task_dir: Path, problems: Report) -> 
             continue
         # Ignore qa-report.json: the report is updated to cite the log after the log was written.
         if not log_hashes_match(log, current, ignore_keys={"qa-report.json"}):
+            candidates = [c for c in fresh_validate_log_candidates(task_dir) if c != log_id]
+            if candidates:
+                hint = (
+                    f" Candidate fresh log uuid(s): {', '.join(candidates[:5])}. "
+                    "Update validate_log_ids then re-run: "
+                    f"python .agent/tools/validate.py --task {task_dir.name} --stage qa"
+                )
+            else:
+                hint = (
+                    " No fresh log uuid is available; re-run an earlier stage "
+                    f"(e.g. python .agent/tools/validate.py --task {task_dir.name} "
+                    "--stage implementation) then refresh validate_log_ids and re-run qa."
+                )
             problems.error(
                 "qa_validate_log_stale",
-                f"validate log {log_id} no longer matches artifact hashes on disk; re-run validate",
+                f"validate log {log_id} no longer matches artifact hashes on disk; re-run validate."
+                + hint,
                 "qa-report.json",
             )
 
@@ -1913,6 +2286,17 @@ def stage_plan(task_dir: Path, problems: Report) -> None:
     check_plan(plan, problems)
     check_plan_against_repository(plan, problems)
     check_design_time_consultation(task_dir, plan, problems)
+    design_path = task_dir / "design.json"
+    if design_path.exists():
+        # KI-005: plan step DDL must not contradict design.data_model nullability.
+        # Wired through stage_plan so a canary that removes the call site fails.
+        try:
+            design = load_json(design_path)
+        except (json.JSONDecodeError, OSError) as exc:
+            problems.error("design_readable", f"cannot read design.json: {exc}", "design.json")
+        else:
+            if isinstance(design, dict):
+                check_plan_ddl_against_design(plan, design, problems)
     requirements_path = task_dir / "requirements.json"
     if requirements_path.exists():
         requirements = load_json(requirements_path)
@@ -1928,25 +2312,48 @@ def stage_plan(task_dir: Path, problems: Report) -> None:
 
 
 def stage_implementation(task_dir: Path, problems: Report) -> None:
+    intake: dict = {}
     intake_path = task_dir / "intake.json"
     if intake_path.exists():
         try:
-            intake = load_json(intake_path)
+            loaded = load_json(intake_path)
         except (json.JSONDecodeError, OSError):
-            intake = {}
-        if isinstance(intake, dict):
+            loaded = {}
+        if isinstance(loaded, dict):
+            intake = loaded
             check_trivial_classification_gate(intake, problems)
             check_model_assignments(intake, problems)
     plan_path = task_dir / "plan.json"
     worker_path = task_dir / "worker-result.json"
-    if not plan_path.exists():
-        problems.error("plan_exists", "plan.json is missing; implementation has no approved scope", str(task_dir.name))
-        return
     if not worker_path.exists():
-        problems.error("worker_result_exists", "worker-result.json is missing; implementation has not reported", str(task_dir.name))
+        problems.error(
+            "worker_result_exists",
+            "worker-result.json is missing; implementation has not reported",
+            str(task_dir.name),
+        )
         return
     check_artifact(worker_path, problems)
-    check_implementation(task_dir, load_json(plan_path), problems)
+
+    if plan_path.exists():
+        check_implementation(task_dir, load_json(plan_path), problems)
+        return
+
+    # S1: trivial + human confirmation may omit plan.json (config plan_required: false).
+    confirmed = (
+        intake.get("complexity") == "trivial"
+        and isinstance(intake.get("classification_confirmation"), dict)
+        and intake["classification_confirmation"].get("decided_by") == "human"
+    )
+    if confirmed:
+        check_implementation_trivial_no_plan(task_dir, problems)
+        return
+
+    problems.error(
+        "plan_exists",
+        "plan.json is missing; implementation has no approved scope "
+        "(trivial tasks may omit the plan only after classification_confirmation.decided_by=human)",
+        str(task_dir.name),
+    )
 
 
 def stage_qa(task_dir: Path, problems: Report) -> None:
@@ -2079,9 +2486,38 @@ def stage_completion(task_dir: Path, problems: Report) -> None:
             "intake.json",
         )
 
+    check_archive_active_residual(task_dir, problems)
     check_gate_presence(task_dir, gates, problems)
     check_validate_logs_for_completion(task_dir, applicable_stages(task_dir), problems)
     problems.note(f"required gates: {gates} (complexity={complexity}, risk={risk})")
+
+
+def check_archive_active_residual(task_dir: Path, problems: Report) -> None:
+    """Fail completion when a task sits in both active/ and completed|archive/ (ship residue)."""
+    task_id = task_dir.name
+    active = REPO_ROOT / "tasks" / "active" / task_id
+    completed = REPO_ROOT / "tasks" / "completed" / task_id
+    archived = REPO_ROOT / "tasks" / "archive" / task_id
+    if not active.is_dir():
+        return
+    if completed.is_dir() or archived.is_dir():
+        lane = "completed" if completed.is_dir() else "archive"
+        problems.error(
+            "archive_active_residual",
+            f"{task_id} exists under both tasks/active/ and tasks/{lane}/. "
+            "Archive is incomplete — /ship must not report success while the active copy remains. "
+            f"Run: python .agent/tools/archive_task.py {task_id}"
+            + (f" --lane {lane}" if lane == "archive" else "")
+            + " (deletion may require human approval).",
+            _rel_to_repo(task_dir),
+        )
+
+
+def _rel_to_repo(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT.resolve()))
+    except ValueError:
+        return str(path)
 
 
 STAGE_CHECKERS = {
@@ -2125,8 +2561,13 @@ def applicable_stages(task_dir: Path) -> list[str]:
 
     # A plan-bearing task is one that is not trivial, or that has a plan on disk anyway.
     has_plan = (task_dir / "plan.json").exists()
-    if complexity != "trivial" or has_plan:
+    if complexity != "trivial":
         stages = ["plan", "implementation"] + stages
+    elif has_plan:
+        stages = ["plan", "implementation"] + stages
+    else:
+        # S1: trivial without plan still runs the implementation gate against worker-result.
+        stages = ["implementation"] + stages
 
     if complexity != "trivial":
         stages.insert(stages.index("completion"), "review")
@@ -2948,6 +3389,92 @@ def run_selftest() -> int:
            any(p.check == "open_questions" for p in report.errors),
            f"got {sorted({p.check for p in report.problems})}")
 
+    # 11f. KI-005: plan DDL nullability must match design.data_model (wired through stage_plan)
+    for stale in scratch.glob("*.json"):
+        stale.unlink()
+    (scratch / "requirements.json").write_text(json.dumps({
+        "task_id": "TASK-001",
+        "acceptance_criteria": [{"id": "AC-1", "text": "notes persist by id"}],
+        "open_questions": [],
+    }), encoding="utf-8")
+    (scratch / "design.json").write_text(json.dumps({
+        "task_id": "TASK-001",
+        "data_model": {
+            "entities": [{
+                "name": "Note",
+                "fields": [
+                    {
+                        "name": "id",
+                        "type": "text",
+                        "nullable": False,
+                        "constraints": ["primary key"],
+                    },
+                    {"name": "body", "type": "text", "nullable": True},
+                ],
+            }],
+        },
+    }), encoding="utf-8")
+    (scratch / "plan.json").write_text(json.dumps({
+        "task_id": "TASK-001",
+        "affected_files": ["db/migrations/001_notes.sql"],
+        "steps": [{
+            "order": 1,
+            "action": "migrate",
+            "file": "db/migrations/001_notes.sql",
+            "description": "Add the notes table.",
+            "description_sql": "CREATE TABLE notes (id TEXT PRIMARY KEY, body TEXT)",
+        }],
+        "acceptance_mapping": {"AC-1": "step 1"},
+        "specialists_required": [],
+    }), encoding="utf-8")
+    report = Report("canary")
+    stage_plan(scratch, report)
+    ki005_rejects_text_pk = any(p.check == "plan_ddl_nullability" for p in report.errors)
+
+    (scratch / "plan.json").write_text(json.dumps({
+        "task_id": "TASK-001",
+        "affected_files": ["db/migrations/001_notes.sql"],
+        "steps": [{
+            "order": 1,
+            "action": "migrate",
+            "file": "db/migrations/001_notes.sql",
+            "description": "Add the notes table.",
+            "description_sql": (
+                "CREATE TABLE notes (id TEXT PRIMARY KEY NOT NULL, body TEXT)"
+            ),
+        }],
+        "acceptance_mapping": {"AC-1": "step 1"},
+        "specialists_required": [],
+    }), encoding="utf-8")
+    report = Report("canary")
+    stage_plan(scratch, report)
+    ki005_accepts_not_null = not any(p.check == "plan_ddl_nullability" for p in report.problems)
+
+    (scratch / "plan.json").write_text(json.dumps({
+        "task_id": "TASK-001",
+        "affected_files": ["db/migrations/001_notes.sql"],
+        "steps": [{
+            "order": 1,
+            "action": "migrate",
+            "file": "db/migrations/001_notes.sql",
+            "description": "Add the notes table.",
+            "description_sql": "CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)",
+        }],
+        "acceptance_mapping": {"AC-1": "step 1"},
+        "specialists_required": [],
+    }), encoding="utf-8")
+    report = Report("canary")
+    stage_plan(scratch, report)
+    ki005_accepts_integer_pk = not any(p.check == "plan_ddl_nullability" for p in report.problems)
+
+    canary(
+        "KI-005: stage_plan rejects TEXT PRIMARY KEY without NOT NULL when design forbids nulls, "
+        "and accepts PRIMARY KEY NOT NULL / INTEGER PRIMARY KEY",
+        ki005_rejects_text_pk and ki005_accepts_not_null and ki005_accepts_integer_pk,
+        f"reject_text_pk={ki005_rejects_text_pk} accept_not_null={ki005_accepts_not_null} "
+        f"accept_integer_pk={ki005_accepts_integer_pk}",
+    )
+
     for stale in scratch.glob("*.json"):
         stale.unlink()
 
@@ -3164,6 +3691,32 @@ def run_selftest() -> int:
             "superseding a task that is still active is an error",
             any(p.check == "supersede_not_archived" for p in unarchived.errors),
             f"checks={sorted({p.check for p in unarchived.errors})}",
+        )
+
+        # S5: likely vs completed alone does not require human adjudication.
+        completed_home = duplicate_scratch / "tasks" / "completed"
+        completed_home.mkdir(parents=True, exist_ok=True)
+        (home / "TASK-901").replace(completed_home / "TASK-901")
+        (home / "TASK-900" / "intake.json").write_text(json.dumps({
+            "task_id": "TASK-900", "title": shared_request, "request": shared_request,
+            "type": "feature", "complexity": "standard", "risk": "low",
+            "layers": ["backend"], "workflow": "feature",
+            "activated_specialists": [], "skipped_specialists": [],
+            "overlap_check": {
+                "checked_against": ["TASK-901"], "method": "token_overlap", "highest_score": 1.0,
+                "matches": [{"task_id": "TASK-901", "score": 1.0, "level": "likely",
+                             "method": "request_narrow", "narrow_score": 1.0, "broad_score": 1.0,
+                             "location": "completed", "relationship": "similar_shipped"}],
+                "decision": {"outcome": "new", "decided_by": "orchestrator",
+                             "rationale": "completed prior work; this request is a new initiative"},
+            },
+        }, ensure_ascii=False), encoding="utf-8")
+        completed_ok = Report("canary")
+        stage_duplicate_check(home / "TASK-900", completed_ok)
+        canary(
+            "S5: likely overlap against completed only does not require human adjudication",
+            not any(p.check == "overlap_needs_human" for p in completed_ok.errors),
+            f"checks={sorted({p.check for p in completed_ok.errors})}",
         )
     finally:
         globals()["REPO_ROOT"] = original_root
@@ -3496,6 +4049,323 @@ def run_selftest() -> int:
         f"got {extracted}",
     )
 
+    partition_scratch = REPO_ROOT / ".agent" / ".selftest-scratch" / "ci-changed-root"
+    (partition_scratch / "tasks" / "active" / "TASK-010").mkdir(parents=True, exist_ok=True)
+    # TASK-001 and TASK-011 deliberately absent — simulate a released/deleted active task.
+    present, removed = partition_active_task_dirs(
+        ["TASK-010", "TASK-001", "TASK-011"], partition_scratch,
+    )
+    canary(
+        "ci-changed skips active TASK ids whose directory was deleted",
+        present == ["TASK-010"] and removed == ["TASK-001", "TASK-011"],
+        f"present={present} removed={removed}",
+    )
+    for stale in sorted(partition_scratch.rglob("*"), reverse=True):
+        try:
+            if stale.is_file():
+                stale.chmod(stat.S_IWRITE | stat.S_IREAD)
+                stale.unlink()
+            else:
+                stale.rmdir()
+        except OSError:
+            pass
+
+    # 24c. S1 trivial-without-plan · S2 plan-scoped scope · S3 stale-log hints ---------------------
+    s_scratch = REPO_ROOT / ".agent" / ".selftest-scratch" / f"scope-{uuid.uuid4().hex[:8]}"
+    s_scratch.mkdir(parents=True, exist_ok=True)
+    original_git = git_changed_files
+
+    def _install_fake_git(paths: list[str]):
+        def fake(_cwd: Path) -> tuple[list[str], str | None]:
+            return list(paths), None
+        globals()["git_changed_files"] = fake
+
+    try:
+        # S2: dirt outside affected_files must not produce scope_extra; worker overclaim must.
+        plan_ok = {
+            "task_id": "TASK-S2",
+            "affected_files": ["docs/a.md"],
+            "steps": [],
+            "acceptance_mapping": {},
+        }
+        (s_scratch / "worker-result.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "TASK-S2",
+                    "status": "completed",
+                    "files_changed": ["docs/a.md"],
+                    "files_created": [],
+                    "files_deleted": [],
+                    "environment": {"confirmed_by_user": True, "runtime": "test"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        _install_fake_git(["docs/a.md", "src/other_task.py"])
+        s2_ok = Report("canary")
+        check_implementation(s_scratch, plan_ok, s2_ok)
+        (s_scratch / "worker-result.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "TASK-S2",
+                    "status": "completed",
+                    "files_changed": ["docs/a.md", "src/sneaky.py"],
+                    "files_created": [],
+                    "files_deleted": [],
+                    "environment": {"confirmed_by_user": True, "runtime": "test"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        s2_bad = Report("canary")
+        check_implementation(s_scratch, plan_ok, s2_bad)
+        canary(
+            "S2: parallel dirt outside affected_files is ignored; worker overclaim is scope_extra",
+            not any(p.check == "scope_extra" for p in s2_ok.errors)
+            and any(
+                p.check == "scope_extra" and "src/sneaky.py" in p.message for p in s2_bad.errors
+            ),
+            f"ok={sorted({p.check for p in s2_ok.errors})} "
+            f"bad={sorted({(p.check, p.message) for p in s2_bad.errors})}",
+        )
+
+        # S1: confirmed trivial without plan uses worker declarations; unconfirmed still needs plan.
+        (s_scratch / "intake.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "TASK-S1",
+                    "complexity": "trivial",
+                    "risk": "low",
+                    "classification_confirmation": {"decided_by": "human"},
+                    "activated_specialists": [],
+                    "overlap_check": {
+                        "checked_against": [],
+                        "method": "token_overlap",
+                        "highest_score": 0,
+                        "matches": [],
+                        "decision": {"outcome": "no_overlap", "decided_by": "orchestrator"},
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (s_scratch / "worker-result.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "TASK-S1",
+                    "status": "completed",
+                    "summary": "docs tweak",
+                    "files_changed": ["docs/note.md"],
+                    "files_created": [],
+                    "files_deleted": [],
+                    "tests_run": [],
+                    "acceptance_addressed": [],
+                    "environment": {"confirmed_by_user": True, "runtime": "test"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        if (s_scratch / "plan.json").exists():
+            (s_scratch / "plan.json").unlink()
+        _install_fake_git(["docs/note.md", "src/other.py"])
+        s1_ok = Report("canary")
+        stage_implementation(s_scratch, s1_ok)
+        stages_trivial = applicable_stages(s_scratch)
+        # Knowledge-only trivial: docs/knowledge/ is SCOPE_EXEMPT for undeclared dirt,
+        # but a declared knowledge path that did change must not warn scope_missing.
+        (s_scratch / "worker-result.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "TASK-S1",
+                    "status": "completed",
+                    "summary": "knowledge tweak",
+                    "files_changed": ["docs/knowledge/project-memory.md"],
+                    "files_created": [],
+                    "files_deleted": [],
+                    "tests_run": [],
+                    "acceptance_addressed": [],
+                    "environment": {"confirmed_by_user": True, "runtime": "test"},
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        _install_fake_git(["docs/knowledge/project-memory.md", "src/other.py"])
+        s1_knowledge = Report("canary")
+        stage_implementation(s_scratch, s1_knowledge)
+        (s_scratch / "intake.json").write_text(
+            json.dumps(
+                {
+                    "task_id": "TASK-S1",
+                    "complexity": "trivial",
+                    "risk": "low",
+                    "activated_specialists": [],
+                    "overlap_check": {
+                        "checked_against": [],
+                        "method": "token_overlap",
+                        "highest_score": 0,
+                        "matches": [],
+                        "decision": {"outcome": "no_overlap", "decided_by": "orchestrator"},
+                    },
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        s1_unconfirmed = Report("canary")
+        stage_implementation(s_scratch, s1_unconfirmed)
+        canary(
+            "S1: confirmed trivial without plan passes implementation; unconfirmed still needs plan",
+            not any(p.check == "plan_exists" for p in s1_ok.errors)
+            and "implementation" in stages_trivial
+            and "plan" not in stages_trivial
+            and any(p.check == "plan_exists" for p in s1_unconfirmed.errors)
+            and any(p.check == "trivial_needs_human" for p in s1_unconfirmed.errors),
+            f"ok={sorted({p.check for p in s1_ok.errors})} "
+            f"stages={stages_trivial} "
+            f"unconfirmed={sorted({p.check for p in s1_unconfirmed.errors})}",
+        )
+        canary(
+            "S1: declared docs/knowledge path that changed is not scope_missing",
+            not any(p.check == "scope_missing" for p in s1_knowledge.errors + s1_knowledge.warnings)
+            and not any(p.check == "plan_exists" for p in s1_knowledge.errors),
+            f"knowledge={sorted({(p.severity, p.check) for p in s1_knowledge.errors + s1_knowledge.warnings})}",
+        )
+
+        # S3: stale citation message names a fresh candidate uuid.
+        (s_scratch / "intake.json").write_text('{"task_id":"TASK-S3"}\n', encoding="utf-8")
+        stale_report = Report("canary")
+        stale_log = write_validate_log(s_scratch, "duplicate_check", stale_report)
+        assert stale_log is not None
+        stale_uuid = load_json(stale_log)["uuid"]
+        (s_scratch / "intake.json").write_text(
+            '{"task_id":"TASK-S3","note":"mutated"}\n', encoding="utf-8"
+        )
+        fresh_log = write_validate_log(s_scratch, "implementation", Report("canary"))
+        assert fresh_log is not None
+        fresh_uuid = load_json(fresh_log)["uuid"]
+        qa_stale = {
+            "task_id": "TASK-S3",
+            "verdict": "PASS",
+            "criteria": [{"criterion_id": "AC-1", "verdict": "PASS", "evidence": "x"}],
+            "validate_log_ids": [stale_uuid],
+        }
+        s3_report = Report("canary")
+        check_validate_log_citations(qa_stale, s_scratch, s3_report)
+        stale_msgs = [p.message for p in s3_report.errors if p.check == "qa_validate_log_stale"]
+        canary(
+            "S3: stale validate_log_ids error lists a fresh candidate uuid",
+            bool(stale_msgs) and fresh_uuid in stale_msgs[0],
+            f"msgs={stale_msgs!r} fresh={fresh_uuid}",
+        )
+    finally:
+        globals()["git_changed_files"] = original_git
+        for stale in sorted(s_scratch.rglob("*"), reverse=True):
+            try:
+                if stale.is_file():
+                    stale.chmod(stat.S_IWRITE | stat.S_IREAD)
+                    stale.unlink()
+                else:
+                    stale.rmdir()
+            except OSError:
+                pass
+
+    # 24d. archive residual: active + completed together fails completion (ship hygiene) ----------
+    arch_scratch = REPO_ROOT / ".agent" / ".selftest-scratch" / f"arch-{uuid.uuid4().hex[:8]}"
+    arch_id = "TASK-999"
+    (arch_scratch / "tasks" / "active" / arch_id).mkdir(parents=True, exist_ok=True)
+    (arch_scratch / "tasks" / "completed" / arch_id).mkdir(parents=True, exist_ok=True)
+    (arch_scratch / "tasks" / "active" / arch_id / "intake.json").write_text(
+        f'{{"task_id":"{arch_id}"}}\n', encoding="utf-8"
+    )
+    (arch_scratch / "tasks" / "completed" / arch_id / "intake.json").write_text(
+        f'{{"task_id":"{arch_id}"}}\n', encoding="utf-8"
+    )
+    original_root = globals()["REPO_ROOT"]
+    try:
+        globals()["REPO_ROOT"] = arch_scratch
+        residual = Report("canary")
+        check_archive_active_residual(arch_scratch / "tasks" / "completed" / arch_id, residual)
+        canary(
+            "archive_active_residual when both active and completed exist",
+            any(p.check == "archive_active_residual" for p in residual.errors),
+            f"checks={sorted({p.check for p in residual.errors})}",
+        )
+        # Tool removes residual when trees match.
+        import importlib.util
+
+        arch_tool = Path(__file__).resolve().parent / "archive_task.py"
+        spec = importlib.util.spec_from_file_location("rgents_archive_task", arch_tool)
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        (arch_scratch / "tasks" / "active" / arch_id / "note.txt").write_text("x\n", encoding="utf-8")
+        (arch_scratch / "tasks" / "completed" / arch_id / "note.txt").write_text("x\n", encoding="utf-8")
+        # Identical task.yaml with active-lane artifact_path (must rewrite after archive).
+        sample_yaml = (
+            f"task_id: {arch_id}\n"
+            "stages:\n"
+            "  qa:\n"
+            f"    artifact_path: tasks/active/{arch_id}/qa-report.json\n"
+        )
+        (arch_scratch / "tasks" / "active" / arch_id / "task.yaml").write_text(
+            sample_yaml, encoding="utf-8"
+        )
+        (arch_scratch / "tasks" / "completed" / arch_id / "task.yaml").write_text(
+            sample_yaml, encoding="utf-8"
+        )
+        code, msg = mod.archive_task(arch_id, root=arch_scratch)
+        canary(
+            "archive_task.py removes residual active when trees match",
+            code == 0 and not (arch_scratch / "tasks" / "active" / arch_id).exists(),
+            f"code={code} msg={msg!r}",
+        )
+        rewritten = (
+            arch_scratch / "tasks" / "completed" / arch_id / "task.yaml"
+        ).read_text(encoding="utf-8")
+        canary(
+            "archive_task.py rewrites task.yaml active artifact_path → completed",
+            f"tasks/completed/{arch_id}/qa-report.json" in rewritten
+            and f"tasks/active/{arch_id}/" not in rewritten,
+            f"yaml={rewritten!r} msg={msg!r}",
+        )
+        # --rewrite-paths on an already-archived tree (idempotent / backfill path).
+        again = (
+            "task_id: {0}\n"
+            "stages:\n"
+            "  qa:\n"
+            "    artifact_path: tasks/active/{0}/qa-report.json\n"
+        ).format(arch_id)
+        (arch_scratch / "tasks" / "completed" / arch_id / "task.yaml").write_text(
+            again, encoding="utf-8"
+        )
+        rcode, rmsg = mod.rewrite_only(arch_id, root=arch_scratch)
+        rtext = (
+            arch_scratch / "tasks" / "completed" / arch_id / "task.yaml"
+        ).read_text(encoding="utf-8")
+        canary(
+            "archive_task --rewrite-paths backfills stale active artifact_path",
+            rcode == 0
+            and f"tasks/completed/{arch_id}/qa-report.json" in rtext
+            and f"tasks/active/{arch_id}/" not in rtext,
+            f"code={rcode} msg={rmsg!r} yaml={rtext!r}",
+        )
+    finally:
+        globals()["REPO_ROOT"] = original_root
+        for stale in sorted(arch_scratch.rglob("*"), reverse=True):
+            try:
+                if stale.is_file():
+                    stale.chmod(stat.S_IWRITE | stat.S_IREAD)
+                    stale.unlink()
+                else:
+                    stale.rmdir()
+            except OSError:
+                pass
+
     # 25. the repository's own setup must be self-consistent ----------------------------------------
     report = Report("canary")
     check_setup(report)
@@ -3558,6 +4428,20 @@ def active_task_ids_from_paths(paths: list[str]) -> list[str]:
     return found
 
 
+def partition_active_task_dirs(
+    task_ids: list[str], root: Path,
+) -> tuple[list[str], list[str]]:
+    """Split active task ids into (still present under tasks/active/, removed/deleted)."""
+    present: list[str] = []
+    removed: list[str] = []
+    for task_id in task_ids:
+        if (root / "tasks" / "active" / task_id).is_dir():
+            present.append(task_id)
+        else:
+            removed.append(task_id)
+    return present, removed
+
+
 def git_diff_name_only(base_ref: str) -> tuple[list[str] | None, str | None]:
     """Return paths changed between base_ref and HEAD, or (None, reason) on failure."""
     if not base_ref or re.fullmatch(r"0+", base_ref):
@@ -3599,17 +4483,18 @@ def run_ci_changed(base_ref: str) -> int:
     if not task_ids:
         print("   no tasks/active/TASK-* paths changed; skip")
         return 0
-    print(f"   changed active tasks: {', '.join(task_ids)}")
+    # A full delete of tasks/active/TASK-* still appears in the diff. There is nothing left
+    # to shape-check — treat missing dirs as released/deleted, not as a CI failure.
+    present, removed = partition_active_task_dirs(task_ids, REPO_ROOT)
+    if removed:
+        print(f"   skipped deleted active tasks: {', '.join(removed)}")
+    if not present:
+        print("   no remaining active tasks to validate; skip")
+        return 0
+    print(f"   changed active tasks: {', '.join(present)}")
     exit_code = 0
-    for task_id in task_ids:
+    for task_id in present:
         task_dir = REPO_ROOT / "tasks" / "active" / task_id
-        if not task_dir.is_dir():
-            print(
-                f"ERROR: changed path names {task_id} but directory missing: {task_dir}",
-                file=sys.stderr,
-            )
-            exit_code = max(exit_code, 1)
-            continue
         stages = applicable_stages(task_dir)
         print(f"   applicable stages for {task_id}: {stages}")
         for stage in stages:

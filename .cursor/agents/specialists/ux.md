@@ -57,6 +57,17 @@ every state the happy path does not show.
    resolve an unspecified case.
 5. **Specify, do not implement.** A precise written spec with the states enumerated is the deliverable.
 
+## WHEN TO ACTIVATE (see `.agent/config.yaml` → specialists.ux)
+
+- **Activate** when the task builds or changes a **product** end-user surface, its copy/layout, or
+  its interaction/state model — or when the human explicitly wants a `ux-report.json` for an upcoming
+  product UI (`ux_specification_for_upcoming_surface`).
+- **Skip** when the sole deliverable is a static UX mock/spec markdown (e.g. `docs/ux/*.md`) and no
+  product UI is in scope — reason `ux_spec_is_the_sole_deliverable`. Producing `ux-report.json` would
+  duplicate that document.
+- **Skip** agent/framework internal docs (`docs/knowledge`, `AGENTS.md`, governance guides) —
+  reason `agent_or_framework_docs_only`.
+
 ## NON-GOALS
 
 - Does not decide backend architecture, API shape, or data model

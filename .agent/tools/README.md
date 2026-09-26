@@ -5,6 +5,7 @@ Tools here act **on** a project. They are not part of a product application's bu
 | File | Runs where | Copied into a project? |
 |---|---|---|
 | `validate.py` | inside a project (`python .agent/tools/validate.py ...`) | **yes** — gate machinery; also `--ci-changed` for light CI |
+| `archive_task.py` | inside a project at `/ship` | **yes** — move `tasks/active/<ID>/` → `completed/` or `archive/`; `--rewrite-paths` backfills stale `artifact_path` |
 | `init_project.py` (+ `.cmd` / `.ps1` / `.sh`) | inside a project or pointed at `--target` | **yes** — local `git init`, no remote |
 | `parallel_worktree.py` | inside a project when a plan uses `parallel_group` | **yes** — path leases, merge lock, git worktrees (C2) |
 | `seed_framework.py` | from the **framework** checkout, pointed at a product | **no** — create / upgrade provisioning |
@@ -19,6 +20,14 @@ that project's stack. It does not.
 
 The line is: **anything a project needs at run time is copied; anything used to create or upgrade a
 project is not.** Contract: `.agent/framework-manifest.yaml`.
+
+## Windows console encoding
+
+On Windows, prefer an activated env (`conda activate vi`) or a direct interpreter path over
+`conda run -n vi python …` when you need to **read** tool output. `conda run` often wraps stdout in
+the system code page (e.g. GBK); non-ASCII print then fails with `UnicodeEncodeError`.
+`validate.py` and `archive_task.py` call `stdout/stderr.reconfigure(encoding="utf-8")` at startup
+when the stream allows it — that helps activated/direct runs, not the `conda run` wrapper itself.
 
 ## Create (first seed)
 
@@ -52,6 +61,20 @@ python .agent/tools/seed_framework.py upgrade --target <product-path> --yes
 python .agent/tools/init_project.py
 python .agent/tools/init_project.py --target <path> --ensure-baseline --refresh-models
 ```
+
+### `--refresh-models` (C1 catalog)
+
+Writes `.agent/models/available.yaml`. **Never stores API keys.** Priority:
+
+1. **Cursor Agent CLI** — `agent models` / `--list-models` (full account / IDE-dispatchable set)
+2. **cursor_sdk** (if installed) unioned with `seed.yaml`
+3. **Cloud Agents API** (`/v1/models` + `/v0/models` via `CURSOR_API_KEY`) unioned with seed — often a
+   narrowed recommended subset
+4. **`seed.yaml` alone**
+
+Parser check (no network): `python .agent/tools/init_project.py --selftest-models-parser`.
+
+Install/login CLI when you need the live full catalog: https://cursor.com/docs/cli/overview
 
 ## What create deliberately does not copy
 

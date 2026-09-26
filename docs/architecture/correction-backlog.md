@@ -1,12 +1,13 @@
 # Rgents 修正清单与方案
 
 - **日期:** 2026-09-22（收束 / 版本标记 2026-09-23）
-- **状态:** **第一次设计修正已结束 · 框架版本 1.0.0**
-- **框架版本:** **1.0.0**（`VERSION`；`.agent/framework-manifest.yaml → release`）
-- **权威文本:** 本文档（画布 `rgents-correction-backlog.canvas.tsx` 仅为 IDE 对照，不进仓库）
+- **状态:** **第一次设计修正已结束 · 当时框架版本 1.0.0**
+- **框架版本（本清单收束时）:** **1.0.0**（`VERSION`；`.agent/framework-manifest.yaml → release`）
+- **当前框架版本:** 见仓库根目录 `VERSION`（现为 **1.0.1**）。1.0.0 之后的 S1–S7 / KI-005 / C1 agent_cli 等见 `CHANGELOG.md` 与 `next-edition-notes.md`。
+- **权威文本:** 本文档记录 **C0–C7 + N2/N3** 的设计与落地；下版入口见 `next-edition-notes.md`（N1）
 - **范围:** 框架设计与工具修正 C0–C7 + N2/N3（本仓库是框架本身，不是产品应用）
-- **治理:** 人类已授权主线程直接改；本轮关闭。下版入口见 `next-edition-notes.md`（N1）
-- **下一步:** 新开产品项目做播种与端到端测试
+- **治理:** 人类已授权主线程直接改；本轮关闭。
+- **下一步（历史）:** 新开产品项目做播种与端到端测试 → 已部分完成（见 sandbox 包）
 
 ---
 
@@ -73,7 +74,7 @@
 ### 流程
 
 1. **Init（与 C7 同期）**  
-   - 适配器扫描（首期 `cursor_api`）。无密钥 → `manual_seed`，标明 `source: seed`。  
+   - 适配器扫描（首期 `cursor_api` / `manual_seed`；**1.0.1 起优先 Agent CLI `agent models`**）。无密钥 → `manual_seed`，标明 `source: seed`。  
    - 写入 YAML/JSON（可选 md 摘要）：`id`、显示名、`context_tokens?`、概述、`source`。  
    - **禁止**写入 API Key。默认不每任务重扫；`init --refresh-models`；`fetched_at` 过期仅警告。
 
@@ -95,7 +96,7 @@
    - 用 `assigned_model`，勿冒称 `executed_model`。
 
 7. **适配器**  
-   - `list_models() -> [...]`；首期 `cursor_api`、`manual_seed`。
+   - `list_models() -> [...]`；适配器：`agent_cli`（首选）、`cursor_sdk`、`cursor_api`、`manual_seed`（1.0.1）。
 
 ### 可行性
 
@@ -249,3 +250,4 @@ plan: parallel_group + claimed_paths
 | 2026-09-23 | **播种升级落地：** `framework-manifest.yaml` + `seed_framework.py` create/upgrade；bootstrap 薄封装；N2 关闭 |
 | 2026-09-23 | **轻量 CI 落地：** `framework-ci.yml` + `validate --ci-changed`（active `--all`）；N3 关闭；仍不重跑产品测试 |
 | 2026-09-23 | **框架版本标记为 1.0.0**（`VERSION` + manifest `release`）；第一次设计修正收束 |
+| 2026-09-24…26 | **1.0.1：** S1–S7；KI-005；C1 `--refresh-models` 改为 Agent CLI 优先（见 `CHANGELOG.md`） |
