@@ -65,17 +65,19 @@ live task; release or archive it when the work is done.
 
 ## Worked examples
 
-One completed example ships with the framework so artifact shapes are concrete rather than described.
-`tasks/archive/TASK-004/` is an archived high-risk intake/requirements record (same invite feature,
-stopped early) if you want the fuller artifact shapes without an active blocked task.
+Examples that ship with the **framework** repository (not required in every seeded product):
 
-| Example | What it shows |
+| Path | What it shows |
 |---|---|
-| `tasks/completed/TASK-002/` | A `trivial` copy change that ran only the QA gate and completed: no design, no plan, no specialists, no review — because 1–2 files with no interface change needs none of them. |
+| `tasks/completed/TASK-002/` | A `trivial` copy change that ran only QA and completed (no design/plan/review). |
+| `tasks/archive/TASK-004/` | Archived high-risk intake/requirements (invite feature, stopped early) for fuller artifact shapes. |
+| `tasks/fixtures/TASK-900/` | Known-bad plan for `validate.py --fixtures` (must fire `step_target_missing`). Not live work. |
 
 ```bash
-# The completed example passes, running only the stages its classification requires
+# Example tasks in this framework repo (regenerates fresh validate logs under tasks/.../logs/)
 python .agent/tools/validate.py --task TASK-002 --all
+# Expect PASS; may warn scope_missing for declared product paths that do not exist in this repo.
+python .agent/tools/validate.py --fixtures
 ```
 
 ## Using this as a template
@@ -86,9 +88,10 @@ Prefer the seed tool from a **framework checkout** (does not leave provisioning 
 python .agent/tools/seed_framework.py create --target <new-project-path>
 ```
 
-Or copy `.cursor/`, `.agent/`, `docs/agents/`, `docs/knowledge/`, and `AGENTS.md` by hand. The framework
-is self-contained: no install, no dependencies, no build step. See `.agent/tools/README.md` and
-`docs/zh/guide.zh-CN.md`.
+Or copy `.cursor/`, `.agent/`, `docs/agents/`, and `AGENTS.md` by hand, then scaffold
+`docs/knowledge/` and optional `docs/architecture/` from `.agent/templates/` (do not copy the
+framework repo's own filled architecture ADRs). The framework is self-contained: no install, no
+dependencies, no build step. See `.agent/tools/README.md` and `docs/zh/guide.zh-CN.md`.
 
 Then establish `.agent/project-baseline.yaml` via a **project-level** spec/design (human + product +
 tech-lead): stack, environment manager, and authoritative commands. Set `status: established`.
@@ -152,26 +155,31 @@ Rgents/
 │       └── seed_framework.py    # create/upgrade from a framework checkout (not copied into products)
 ├── docs/
 │   ├── agents/                  # responsibilities, permissions, protocols
-│   ├── architecture/            # overview, decisions (ADRs), conventions
 │   ├── knowledge/               # project memory, lessons, known issues
 │   └── zh/                      # 中文使用手册
 └── tasks/
     ├── active/                  # live work
-    ├── completed/
-    ├── archive/
-    └── _template/               # copy this to start a task by hand
+    ├── completed/               # finished (example: TASK-002)
+    ├── archive/                 # stopped / superseded (example: TASK-004)
+    └── fixtures/                # known-bad samples for --fixtures (TASK-900; framework repo)
 ```
 
-Maintainer-only reference audits and working correction notes stay local (`refers/`,
-`docs/architecture/internal-notes.md`) and are gitignored — they are not part of the public tree.
+Hand-starting a task (rare): follow `.agent/templates/task/README.md` under `tasks/active/<TASK-ID>/`.
+There is no `tasks/_template/` directory in the tree.
+
+Framework-maintainer architecture notes under `docs/architecture/` are **local-only** (gitignored).
+Product repos may get blank templates once on `seed create` from `.agent/templates/architecture/`
+(product_owned; upgrades never overwrite).
 
 ## Design influences
 
 This framework was built after auditing two reference projects:
 
 - **[JahnelGroup/multi-agents](https://github.com/JahnelGroup/multi-agents)** — a Cursor pipeline
-  template. Adopted: the four-section agent skeleton (`ROLE` / `PRIMARY OBJECTIVE` /
-  `CORE RESPONSIBILITIES` / `NON-GOALS`), minimal frontmatter, the single-writer artifact contract,
+  template. Adopted: the agent skeleton (**four sections required by validate** — `ROLE` /
+  `PRIMARY OBJECTIVE` / `CORE RESPONSIBILITIES` / `NON-GOALS` — plus the conventional
+  `DECISION FRAMEWORK` section every role file also carries), minimal frontmatter, the single-writer
+  artifact contract,
   the plan↔diff scope invariants, the `error`/`warning` severity split, `lessons.yaml` with a capacity
   cap, and the "escalation is cheap and expected" cost stance. Corrected: its `lib/` cross-directory
   import (which breaks when the bundle is copied into a project as documented), a gate stage that had
@@ -217,8 +225,9 @@ both. It reported the blocker and stopped. That is the `NON-GOALS` boundary doin
 - **Add a gate**: add a stage to `.agent/workflows/*.yaml` and a checker to `.agent/tools/validate.py`.
 - **Change routing**: edit `.agent/config.yaml` only — it is the single source of truth. Agent files
   reference it rather than restating it.
-- **After editing any agent file**: run `python .agent/regenerate-governance-docs.py` so the permission
-  and responsibility matrices stay derived from the contracts instead of drifting.
+- **After editing any agent file**: run `python .agent/regenerate-governance-docs.py` (framework
+  checkout / CI only — not seeded into products) so the permission and responsibility matrices stay
+  derived from the contracts instead of drifting.
 
 ## Governance
 

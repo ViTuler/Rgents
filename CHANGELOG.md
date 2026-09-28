@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Publish hygiene:** `docs/architecture/` is gitignored (local maintainer notes only); removed from the public tree. Product scaffolds still come from `.agent/templates/architecture/`.
+- **Seed hygiene (A1):** `never_copy_names` strips `framework-known-issues.md` and `regenerate-governance-docs.py` from product creates; docs updated so products no longer inherit the framework defect list or the governance regenerator.
+- **Docs / config alignment (DeepSeek audit):** `docs/agents/**` listed in `AGENTS.md` governance; database/ux `stage_position` aligned with workflows; `/orchestrator` wording corrected; `design_defect` terminology; human-intervention list (8); reviewer C5 dimension; agent skeleton / templates / ADR-003 language consistency; CHANGELOG header restored.
+
 ## 1.0.2 — 2026-09-28
 
 DeepSeek-aligned packaging fixes (cheap crack-sealing; N4 / other suggestions still deferred).
@@ -9,6 +15,8 @@ DeepSeek-aligned packaging fixes (cheap crack-sealing; N4 / other suggestions st
 - **Fixtures:** `tasks/fixtures/TASK-900/` + `python .agent/tools/validate.py --fixtures` (`must_fire` / `must_not_fire`). TASK-900 asserts `step_target_missing`.
 - **CI:** `framework-ci.yml` adds `--fixtures` and a governance-docs job (`regenerate-governance-docs.py` + `git diff --exit-code`).
 - **Docs / version:** `VERSION` / manifest / AGENTS / README / zh guides → **1.0.2**.
+- **Docs:** task-lane layout (`active` / `completed` / `archive` / `fixtures`); removed stale `tasks/_template/` claim; `--fixtures` wording.
+- **Packaging:** `docs/architecture/` is **product_owned** for seeded products (templates under `.agent/templates/architecture/`). The framework checkout keeps maintainer architecture notes **local-only** (gitignored), not as a published replaceable surface.
 
 ## 1.0.1 — 2026-09-24 (docs/models/KI follow-ups through 2026-09-26)
 
@@ -31,4 +39,4 @@ Sandbox E2E follow-ups and subsequent catalog/validator fixes (no framework-repo
 
 ## 1.0.0 — 2026-09-23
 
-First design-correction closure (C0–C7, N2/N3). Details: this changelog and ADR-003 in `docs/architecture/decisions.md`.
+First design-correction closure (C0–C7, N2/N3). Details: this changelog.
