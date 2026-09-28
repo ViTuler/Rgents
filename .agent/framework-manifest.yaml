@@ -5,7 +5,7 @@
 version: 1
 framework_id: rgents
 # Semver of this framework release. Bump when shipping changes seeded products should pull.
-release: "1.0.1"
+release: "1.0.2"
 
 # Top-level surfaces copied on create (then pruned / re-scaffolded).
 create_surfaces:

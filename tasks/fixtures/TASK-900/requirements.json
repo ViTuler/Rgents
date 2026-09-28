@@ -1,0 +1,10 @@
+{
+  "task_id": "TASK-900",
+  "acceptance_criteria": [
+    {
+      "id": "AC-1",
+      "text": "fixture criterion — not product work"
+    }
+  ],
+  "open_questions": []
+}

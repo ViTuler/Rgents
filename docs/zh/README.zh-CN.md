@@ -1,6 +1,6 @@
 # Rgents — 中文总览
 
-> **框架版本：** `1.0.1`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）
+> **框架版本：** `1.0.2`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）
 
 一套用于 Cursor 的**多 Agent 软件开发团队**。它不是一个"角色提示词合集"，而是一个小型软件组织：
 1 个协调者、5 个核心角色、6 个按风险按需激活的专家角色，加上产物契约与**可执行的质量门禁**。
@@ -161,7 +161,7 @@ Agent 之间不传对话，只传 `tasks/<TASK-ID>/` 下的文件，并且**传�
 | 团队配置错误 | `--check-setup`：角色注册、frontmatter 字段、必需小节、工作流引用的角色是否存在 |
 
 自检（`--selftest`）会用**已知有缺陷的输入**逐个触发上述每一条不变量，证明它们真的会报警，
-而不是只写在文档里。canary 数量随版本增长；以命令输出为准（1.0.1 量级约 50+ 项）。
+而不是只写在文档里。canary 数量随版本增长；以命令输出为准（1.0.2 量级约 50+ 项）。
 
 ## 示例任务
 
@@ -198,4 +198,4 @@ Agent 之间不传对话，只传 `tasks/<TASK-ID>/` 下的文件，并且**传�
 - `docs/zh/roles.zh-CN.md` — 12 个角色的详细职责、边界与协作方式
 - `docs/zh/workflow.zh-CN.md` — 工作流、门禁、任务状态机与返工机制
 - `docs/agents/protocols.md` — 交接协议（英文）
-- `refers/_refs/` — 两个参考项目的完整审计报告
+- `docs/architecture/decisions.md` — 已冻结的架构决策（ADR）

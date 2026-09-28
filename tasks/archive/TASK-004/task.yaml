@@ -20,7 +20,7 @@ abandoned:
     The structural finding is still valid and is worth keeping: a plan written for an assumed
     codebase (step 6 modifies src/organizations/routes.ts, which does not exist here) is caught
     mechanically by check_plan_against_repository, and the decision that implementing anyway would
-    be a silent redesign. The environment findings ENV-3 (conda reports the environment `vi` twice)
+    be a silent redesign. The environment findings ENV-3 (conda reported a duplicated env name)
     and the STRUCT-1 analysis also remain accurate.
   superseded_by: "TASK-001 in the Rgents-Sandbox project, which ran the same feature end to end on a clean baseline."
   do_not: >
@@ -69,30 +69,27 @@ environment:
   confirmed_by_user: false
   detected:
     conda_environments:
-      - "base (Python 3.13.9) — currently active; `CONDA_DEFAULT_ENV` is empty"
-      - "package"
-      - "tool"
-      - "torch"
-      - "vi (Python 3.12.13)"
-    node: "v24.15.0"
-    npm: "11.12.1"
+      - "base — was active at inspection time"
+      - "(other named envs redacted — do not commit personal env inventories to a public framework repo)"
+    node: "(redacted)"
+    npm: "(redacted)"
     nvm: "not installed"
     product_stack: "none found — no package.json, lockfile, src/, pages/, db/, or tests/"
   findings:
     - id: "ENV-3"
       severity: "medium"
       description: >
-        `conda env list` reports the environment named `vi` TWICE, both entries pointing at the same
-        environment directory.
+        `conda env list` reported the same environment name TWICE, both entries pointing at the
+        same environment directory (name redacted for the public archive).
       impact: >
-        A duplicated name makes "use the vi environment" ambiguous as an instruction: two entries
+        A duplicated name makes "use the <env> environment" ambiguous as an instruction: two entries
         can disagree about which interpreter or package set a command resolves to. This is exactly
         the class of problem the environment gate exists to catch, because the resulting failure
         would look like a code defect.
       resolution: >
-        `conda run -n vi python` was used successfully and reported Python 3.12.13, so the exact
-        invocation is recorded rather than the bare name. The duplicate registration itself is a
-        machine configuration issue for the human to clean up.
+        Prefer invoking `python` from an activated named env (never conda `base`) rather than relying
+        on a bare ambiguous name. The duplicate registration itself is a machine configuration
+        issue for the human to clean up — it must not be copied into shared docs as a concrete path.
       resolved: false
 
 # ENV-1 and ENV-2 above are the blocking items the orchestrator recorded while the gate was open.
@@ -197,7 +194,7 @@ routing_decisions:
     reason: "Same cause: tech-lead could not be dispatched. The design invents no product behaviour; every constraint traces to a business rule or an acceptance criterion, and the plan passes the plan-stage invariants."
   - stage: "planning"
     decision: "plan stage re-validated before /build"
-    reason: "python .agent/tools/validate.py --task TASK-004 --stage plan, via conda env vi (Python 3.12.13). RESULT: PASS."
+    reason: "python .agent/tools/validate.py --task TASK-004 --stage plan (Python 3.12 on PATH). RESULT: PASS."
     verdict: "PASS"
   - stage: "environment"
     decision: "stop_and_wait; do not dispatch developer"
@@ -350,7 +347,7 @@ human_signoff:
 
 running_summary: >
   Intake, specification, design, and planning have passed. /build opened on 2026-09-20.
-  Plan stage re-validated: `conda run -n vi python .agent/tools/validate.py --task TASK-004
+  Plan stage re-validated: `python .agent/tools/validate.py --task TASK-004
   --stage plan` -> PASS. Implementation was not started. Environment gate WAITING, then
   paused by the human ("temporary stop"). No developer, UX, or database dispatch. Resume
   from the environment stage: confirm runtime/commands/services/config/baseline, and decide

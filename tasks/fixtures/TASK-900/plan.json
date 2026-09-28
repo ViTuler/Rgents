@@ -1,0 +1,17 @@
+{
+  "task_id": "TASK-900",
+  "affected_files": [
+    "src/organizations/routes.ts"
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "action": "modify",
+      "file": "src/organizations/routes.ts",
+      "description": "Register invitation routes on a router that does not exist in this repository."
+    }
+  ],
+  "acceptance_mapping": {
+    "AC-1": "fixture only — not a real task"
+  }
+}

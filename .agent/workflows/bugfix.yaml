@@ -6,129 +6,128 @@ name: bugfix
 description: Diagnose and fix a defect, with a reproduction that fails before and passes after.
 
 entry:
-  command: /triage
-  agent: orchestrator
+    command: /triage
+    agent: orchestrator
 
 stages:
+    - id: intake
+      agent: orchestrator
+      artifact: intake.json
+      description: >
+          Classify; determine whether this is a defect, a missing feature, or a requirement change; and
+          compare the request against every active task, recording the result in overlap_check. A likely
+          overlap must be adjudicated by the human before any further stage runs.
+      required: true
+      gates: [duplicate_check]
+      rule: >
+          If the observed behavior is what the requirements specify, this is NOT a bugfix —
+          route it as a feature or requirement change instead.
 
-  - id: intake
-    agent: orchestrator
-    artifact: intake.json
-    description: >
-      Classify; determine whether this is a defect, a missing feature, or a requirement change; and
-      compare the request against every active task, recording the result in overlap_check. A likely
-      overlap must be adjudicated by the human before any further stage runs.
-    required: true
-    gates: [duplicate_check]
-    rule: >
-      If the observed behavior is what the requirements specify, this is NOT a bugfix —
-      route it as a feature or requirement change instead.
+    - id: reproduction
+      agent: qa
+      artifact: qa-report.json
+      reads: [intake.json]
+      description: >
+          Reproduce the defect and capture the evidence: exact steps, environment, observed vs expected,
+          and a failing test or a minimal reproduction. Record root-cause ownership classification.
+      required: true
+      rule: A defect that cannot be reproduced is not yet understood — do not proceed to implement a guess.
 
-  - id: reproduction
-    agent: qa
-    artifact: qa-report.json
-    reads: [intake.json]
-    description: >
-      Reproduce the defect and capture the evidence: exact steps, environment, observed vs expected,
-      and a failing test or a minimal reproduction. Record root-cause ownership classification.
-    required: true
-    rule: A defect that cannot be reproduced is not yet understood — do not proceed to implement a guess.
+    - id: diagnosis
+      agent: tech-lead
+      artifact: design.json
+      reads: [qa-report.json, intake.json]
+      description: >
+          Root cause analysis and the minimal correct fix at the right layer. Include the
+          five-field failure record (Error / Symptom / Root cause / Solution / Verification).
+      required: true
+      condition: complexity != trivial
+      rule: Fix the cause, not the symptom. A guard at the call site is not a root-cause fix.
 
-  - id: diagnosis
-    agent: tech-lead
-    artifact: design.json
-    reads: [qa-report.json, intake.json]
-    description: >
-      Root cause analysis and the minimal correct fix at the right layer. Include the
-      five-field failure record (Error / Symptom / Root cause / Solution / Verification).
-    required: true
-    condition: complexity != trivial
-    rule: Fix the cause, not the symptom. A guard at the call site is not a root-cause fix.
+    - id: environment
+      agent: orchestrator
+      reads: [intake.json]
+      description: >
+          Confirm the development environment with the human before reproducing, fixing or verifying: the
+          runtime and version, the active environment, the authoritative commands, required services, and
+          whether the suite passes on the current revision. A reproduction attempted in the wrong
+          environment produces a misleading "cannot reproduce" result.
+      required: true
+      condition: complexity != trivial
+      rule: See .cursor/rules/environment.mdc. Record the confirmation in worker-result.json -> environment.
+      on_unanswered: stop_and_wait
 
-  - id: environment
-    agent: orchestrator
-    reads: [intake.json]
-    description: >
-      Confirm the development environment with the human before reproducing, fixing or verifying: the
-      runtime and version, the active environment, the authoritative commands, required services, and
-      whether the suite passes on the current revision. A reproduction attempted in the wrong
-      environment produces a misleading "cannot reproduce" result.
-    required: true
-    condition: complexity != trivial
-    rule: See .cursor/rules/environment.mdc. Record the confirmation in worker-result.json -> environment.
-    on_unanswered: stop_and_wait
+    - id: implementation
+      agent: developer
+      artifact: worker-result.json
+      reads: [design.json, qa-report.json]
+      description: Apply the minimal fix plus a regression test that fails without the fix.
+      required: true
+      gates: [environment_confirmed]
+      rule: A bugfix without a regression test will regress.
 
-  - id: implementation
-    agent: developer
-    artifact: worker-result.json
-    reads: [design.json, qa-report.json]
-    description: Apply the minimal fix plus a regression test that fails without the fix.
-    required: true
-    gates: [environment_confirmed]
-    rule: A bugfix without a regression test will regress.
+    - id: database_review
+      agent: database
+      artifact: db-report.json
+      reads: [design.json, worker-result.json]
+      description: Assess if the defect or fix involves schema, query shape, or data integrity.
+      condition: specialists includes database
+      stage_position: parallel_with_qa
+      blocking: true
 
-  - id: database_review
-    agent: database
-    artifact: db-report.json
-    reads: [design.json, worker-result.json]
-    description: Assess if the defect or fix involves schema, query shape, or data integrity.
-    condition: specialists includes database
-    stage_position: parallel_with_qa
-    blocking: true
+    - id: qa
+      agent: qa
+      artifact: qa-report.json
+      reads: [requirements.json, design.json, worker-result.json]
+      description: >
+          Verify the reproduction now passes, the regression test is meaningful, and no neighbouring
+          behavior broke. Re-run the full suite, not only the new test.
+      required: true
+      blocking: true
+      on_fail: implementation
 
-  - id: qa
-    agent: qa
-    artifact: qa-report.json
-    reads: [requirements.json, design.json, worker-result.json]
-    description: >
-      Verify the reproduction now passes, the regression test is meaningful, and no neighbouring
-      behavior broke. Re-run the full suite, not only the new test.
-    required: true
-    blocking: true
-    on_fail: implementation
+    - id: security
+      agent: security
+      artifact: security-report.json
+      reads: [design.json, worker-result.json]
+      description: Assess whether the defect was a vulnerability, or whether the fix introduces one.
+      condition: specialists includes security
+      stage_position: parallel_with_qa
+      blocking: true
+      on_fail: implementation
 
-  - id: security
-    agent: security
-    artifact: security-report.json
-    reads: [design.json, worker-result.json]
-    description: Assess whether the defect was a vulnerability, or whether the fix introduces one.
-    condition: specialists includes security
-    stage_position: parallel_with_qa
-    blocking: true
-    on_fail: implementation
+    - id: review
+      agent: reviewer
+      artifact: review-report.json
+      reads: [design.json, worker-result.json, qa-report.json]
+      description: Confirm the fix addresses the cause, is minimal, and does not introduce drift or scope creep.
+      required: true
+      condition: complexity != trivial
+      blocking: true
+      on_fail: implementation
 
-  - id: review
-    agent: reviewer
-    artifact: review-report.json
-    reads: [design.json, worker-result.json, qa-report.json]
-    description: Confirm the fix addresses the cause, is minimal, and does not introduce drift or scope creep.
-    required: true
-    condition: complexity != trivial
-    blocking: true
-    on_fail: implementation
+    - id: delivery
+      agent: devops
+      artifact: delivery-report.json
+      reads: [worker-result.json]
+      description: Confirm the fix is deployable and that any affected migration or config is safe.
+      condition: specialists includes devops
+      blocking: true
 
-  - id: delivery
-    agent: devops
-    artifact: delivery-report.json
-    reads: [worker-result.json]
-    description: Confirm the fix is deployable and that any affected migration or config is safe.
-    condition: specialists includes devops
-    blocking: true
-
-  - id: completion
-    agent: orchestrator
-    artifact: task.yaml
-    description: Confirm gates; append the failure record to docs/knowledge/lessons.yaml; archive.
-    required: true
-    rule: Every fixed defect produces a lesson entry — this is how the team stops repeating itself.
+    - id: completion
+      agent: orchestrator
+      artifact: task.yaml
+      description: Confirm gates; append the failure record to docs/knowledge/lessons.yaml; archive.
+      required: true
+      rule: Every fixed defect produces a lesson entry — this is how the team stops repeating itself.
 
 gates_in_order: [qa, security, database_review, review, delivery]
 
 rework:
-  route_to:
-    implementation_defect: developer
-    requirement_defect: product
-    design_defect: tech-lead
-    test_defect: qa
-    unclear_scope: orchestrator
-  re_enter_at: qa
+    route_to:
+        implementation_defect: developer
+        requirement_defect: product
+        design_defect: tech-lead
+        test_defect: qa
+        unclear_scope: orchestrator
+    re_enter_at: qa

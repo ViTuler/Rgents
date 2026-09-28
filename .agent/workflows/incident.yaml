@@ -90,7 +90,7 @@ stages:
   - id: review
     agent: reviewer
     artifact: review-report.json
-    reads: [worker-result.json, qa-report.json, design.json]
+    reads: [worker-result.json, qa-report.json]
     description: >
       Review the mitigation for correctness and the permanent fix for fitness. A mitigation is
       explicitly allowed to be inelegant — it is not allowed to be unsafe or unexplained.

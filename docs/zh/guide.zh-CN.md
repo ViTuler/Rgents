@@ -1,7 +1,7 @@
 # Rgents 使用说明（中文）
 
 > 面向「把框架接到产品仓库、日常开任务、跑门禁」的操作手册。  
-> 版本：`1.0.1`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）  
+> 版本：`1.0.2`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）  
 > 概念总览见 [`README.zh-CN.md`](./README.zh-CN.md)；角色细节见 [`roles.zh-CN.md`](./roles.zh-CN.md)；工作流与状态机见 [`workflow.zh-CN.md`](./workflow.zh-CN.md)。
 
 ---
@@ -23,6 +23,7 @@
 
 ```bash
 python .agent/tools/validate.py --selftest
+python .agent/tools/validate.py --fixtures
 python .agent/tools/validate.py --check-setup
 python .agent/tools/validate.py --task TASK-002 --all
 ```
@@ -30,17 +31,20 @@ python .agent/tools/validate.py --task TASK-002 --all
 | 命令 | 含义 |
 |---|---|
 | `--selftest` | 用故意造坏的输入证明不变量会报警 |
+| `--fixtures` | 对 `tasks/fixtures/` 已知病灶任务跑 must_fire / must_not_fire |
 | `--check-setup` | 角色注册、工作流引用、可移植性等配置自洽 |
 | `--task … --all` | 按该任务的复杂度/风险，跑适用阶段 |
+| `--task … --stage X` | **仅**跑阶段 X；成功时会标注 `stage-only`（不等于全任务通过） |
 
 退出码：`0` 通过（可有 warning）；`1` 有 error；`2` 环境/路径/JSON 问题。
 
 **Windows / conda 注意：** 不要用 `conda run -n <env> python …` 来**看** validate / selftest 的控制台输出——`conda run` 在 Windows 上常把管道设成系统默认代码页（如 GBK），非 ASCII 一打印就 `UnicodeEncodeError`。优先：
 
-1. 先 `conda activate <env>`（**不要**用 `base`），再直接 `python .agent/tools/validate.py …`；或  
-2. 直调解释器，例如 `E:\Conda\envs\vi\python.exe .agent/tools\validate.py …`。
+1. 先激活你的命名环境（**不要**用 conda `base`），再直接 `python .agent/tools/validate.py …`；或  
+2. 直调该环境里的解释器，例如  
+   `path/to/envs/<your-env>/python.exe .agent/tools/validate.py …`（路径因机器而异，**勿把本机绝对路径写进仓库文档**）。
 
-`validate.py` / `archive_task.py` 启动时会尽量把 stdout/stderr 设为 UTF-8，但仍无法修好 `conda run` 自身的包装层。
+框架门禁本身只需 **PATH 上的 Python 3.8+（stdlib）**；conda/venv 是贡献者本机选择，不是框架公共依赖。
 
 ---
 
@@ -198,8 +202,10 @@ python .agent/tools/validate.py --ci-changed --base origin/main
 工作流：`.github/workflows/framework-ci.yml`（`framework-ci`）
 
 1. `validate.py --selftest`  
-2. `validate.py --check-setup`  
-3. `validate.py --ci-changed`（仅变更触及的 `tasks/active`）
+2. `validate.py --fixtures`  
+3. `validate.py --check-setup`  
+4. regenerate governance docs + `git diff --exit-code`  
+5. `validate.py --ci-changed`（仅变更触及的 `tasks/active`）
 
 ---
 
@@ -241,4 +247,4 @@ python .agent/tools/validate.py --ci-changed --base origin/main
 | **本文 `guide.zh-CN.md`** | 种子化 / 日常命令 / 环境 / CI 操作说明 |
 | 仓库根 `AGENTS.md` / `README.md` | 英文宪法与总览（Agent 默认先读英文） |
 
-英文审计与设计笔记仍在 `docs/architecture/`、`refers/`；与本文冲突时，以 `.agent/config.yaml` 与 agent 定义文件为准。
+公开架构说明见 `docs/architecture/`（overview / decisions / conventions）。维护者本地的参考审计与修正备忘（`refers/`、`internal-notes.md`）不随仓库发布。与本文冲突时，以 `.agent/config.yaml` 与 agent 定义文件为准。

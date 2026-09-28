@@ -1,0 +1,6 @@
+# Known-bad fixture: plan describes a codebase this framework repo does not contain.
+# validate --fixtures must fire step_target_missing and must not invent unrelated errors.
+defect_class: plan_describes_a_different_codebase
+stage: plan
+must_fire: ["step_target_missing"]
+must_not_fire: []

@@ -4,7 +4,7 @@ Tools here act **on** a project. They are not part of a product application's bu
 
 | File | Runs where | Copied into a project? |
 |---|---|---|
-| `validate.py` | inside a project (`python .agent/tools/validate.py ...`) | **yes** — gate machinery; also `--ci-changed` for light CI |
+| `validate.py` | inside a project (`python .agent/tools/validate.py ...`) | **yes** — gate machinery; also `--ci-changed`, `--fixtures` |
 | `archive_task.py` | inside a project at `/ship` | **yes** — move `tasks/active/<ID>/` → `completed/` or `archive/`; `--rewrite-paths` backfills stale `artifact_path` |
 | `init_project.py` (+ `.cmd` / `.ps1` / `.sh`) | inside a project or pointed at `--target` | **yes** — local `git init`, no remote |
 | `parallel_worktree.py` | inside a project when a plan uses `parallel_group` | **yes** — path leases, merge lock, git worktrees (C2) |
@@ -23,11 +23,16 @@ project is not.** Contract: `.agent/framework-manifest.yaml`.
 
 ## Windows console encoding
 
-On Windows, prefer an activated env (`conda activate vi`) or a direct interpreter path over
-`conda run -n vi python …` when you need to **read** tool output. `conda run` often wraps stdout in
-the system code page (e.g. GBK); non-ASCII print then fails with `UnicodeEncodeError`.
+On Windows, prefer an **activated** named env (`conda activate <your-env>`) or invoking that
+env's `python` on PATH over `conda run -n <your-env> python …` when you need to **read** tool
+output. `conda run` often wraps stdout in the system code page (e.g. GBK); non-ASCII print then
+fails with `UnicodeEncodeError`.
 `validate.py` and `archive_task.py` call `stdout/stderr.reconfigure(encoding="utf-8")` at startup
 when the stream allows it — that helps activated/direct runs, not the `conda run` wrapper itself.
+
+Do **not** commit personal absolute interpreter paths (drive letters, home directories, private
+env names) into framework docs or baselines — this repository is public. Use placeholders such as
+`<your-env>` in examples.
 
 ## Create (first seed)
 

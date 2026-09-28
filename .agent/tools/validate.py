@@ -17,6 +17,7 @@ standard library so it can be copied into any project and run anywhere.
 Usage
 -----
     python .agent/tools/validate.py --selftest
+    python .agent/tools/validate.py --fixtures
     python .agent/tools/validate.py --check-setup
     python .agent/tools/validate.py --ci-changed --base origin/main
     python .agent/tools/validate.py --artifact tasks/TASK-001/plan.json
@@ -38,6 +39,7 @@ from __future__ import annotations
 import argparse
 import ast
 import hashlib
+import io
 import json
 import os
 import re
@@ -45,6 +47,7 @@ import stat
 import subprocess
 import sys
 import uuid
+from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -119,6 +122,35 @@ SCOPE_EXEMPT_PREFIXES = ("tasks/", ".agent/", "docs/knowledge/")
 # without parsing YAML.
 GATE_ORDER = ["qa", "security", "performance", "ux", "database", "data", "review", "devops"]
 
+# Workflow YAML historically used aliases for the same gates GATE_ORDER / required_gates use.
+WORKFLOW_GATE_ALIASES = {
+    "qa": "qa",
+    "security": "security",
+    "performance": "performance",
+    "ux": "ux",
+    "database": "database",
+    "database_review": "database",
+    "data": "data",
+    "data_review": "data",
+    "review": "review",
+    "devops": "devops",
+    "delivery": "devops",
+}
+# Stages that may appear in gates_in_order without being a GATE_ORDER completion gate.
+WORKFLOW_GATE_LOCAL = frozenset({"prevention_verification"})
+
+# Specialist / reviewer agents whose activation implies a gate that gates_in_order must list.
+WORKFLOW_AGENT_TO_GATE = {
+    "qa": "qa",
+    "security": "security",
+    "performance": "performance",
+    "ux": "ux",
+    "database": "database",
+    "data": "data",
+    "reviewer": "review",
+    "devops": "devops",
+}
+
 GATE_ARTIFACT = {
     "qa": "qa-report.json",
     "security": "security-report.json",
@@ -191,6 +223,8 @@ class Report:
         self.title = title
         self.problems: list[Problem] = []
         self.notes: list[str] = []
+        # Optional qualifier appended to a clean PASS line (e.g. stage-only runs).
+        self.pass_qualifier: str | None = None
 
     def error(self, check: str, message: str, path: str | None = None) -> None:
         self.problems.append(Problem(check, message, "error", path))
@@ -218,10 +252,11 @@ class Report:
         if self.errors:
             print(f"RESULT: {len(self.errors)} error(s), {len(self.warnings)} warning(s) - FAIL")
             return 1
+        qualifier = f" ({self.pass_qualifier})" if self.pass_qualifier else ""
         if self.warnings:
-            print(f"RESULT: PASS with {len(self.warnings)} warning(s)")
+            print(f"RESULT: PASS with {len(self.warnings)} warning(s){qualifier}")
             return 0
-        print("RESULT: PASS")
+        print(f"RESULT: PASS{qualifier}")
         return 0
 
 
@@ -2749,6 +2784,7 @@ def check_setup(problems: Report) -> None:
                     f"workflow references unknown agent '{role}'",
                     workflow_path.name,
                 )
+        check_workflow_gates_in_order(workflow_path, text, problems)
 
     # The environment gate is enforced against worker-result.json, so the rule that documents it
     # must exist. A gate whose rule has been deleted is a requirement with no explanation.
@@ -2776,6 +2812,68 @@ def check_setup(problems: Report) -> None:
                   f"{len(rule_names)} rules")
 
     check_portability(problems)
+
+
+def _parse_gates_in_order(text: str) -> list[str]:
+    """Extract gates_in_order ids from a workflow YAML (flow list or block list)."""
+    flow = re.search(r"(?ms)^gates_in_order:\s*\[([^\]]*)\]", text)
+    if flow:
+        return [part.strip().strip("'\"") for part in flow.group(1).split(",") if part.strip()]
+    # Block form:
+    # gates_in_order:
+    #   - qa
+    block = re.search(r"(?ms)^gates_in_order:\s*\n((?:\s+-\s+\S+\s*\n?)+)", text)
+    if block:
+        return re.findall(r"^\s+-\s+(\S+)\s*$", block.group(1), re.MULTILINE)
+    return []
+
+
+def check_workflow_gates_in_order(workflow_path: Path, text: str, problems: Report) -> None:
+    """gates_in_order must agree with GATE_ORDER / stage agents (no declarative theatre).
+
+    Workflow YAML is human-readable process knowledge, but names that look executable must
+    map onto the same gate ids validate.py uses for completion. Missing a specialist that the
+    workflow can dispatch (e.g. ux) while GATE_ORDER requires that report is the failure mode
+    this check exists to catch.
+    """
+    rel = workflow_path.name
+    declared = _parse_gates_in_order(text)
+    if not declared:
+        problems.error(
+            "workflow_gates_missing",
+            "workflow has no parseable gates_in_order list",
+            rel,
+        )
+        return
+
+    canonical_declared: set[str] = set()
+    for name in declared:
+        if name in WORKFLOW_GATE_LOCAL:
+            continue
+        mapped = WORKFLOW_GATE_ALIASES.get(name)
+        if mapped is None:
+            problems.error(
+                "workflow_gate_unknown",
+                f"gates_in_order entry {name!r} is not a known GATE_ORDER alias "
+                f"(known: {sorted(WORKFLOW_GATE_ALIASES)}; local-ok: {sorted(WORKFLOW_GATE_LOCAL)})",
+                rel,
+            )
+            continue
+        canonical_declared.add(mapped)
+
+    # Agents referenced by stages imply gates that must appear in gates_in_order.
+    for agent in re.findall(r"^\s+agent:\s*([a-z][a-z0-9-]*)\s*$", text, re.MULTILINE):
+        gate = WORKFLOW_AGENT_TO_GATE.get(agent)
+        if gate is None:
+            continue
+        if gate not in canonical_declared:
+            problems.error(
+                "workflow_gate_agent_missing",
+                f"workflow dispatches agent '{agent}' (gate '{gate}') but gates_in_order "
+                f"does not list '{gate}' or an alias. Completion requires the report when "
+                f"that specialist is activated; the workflow declaration must say so.",
+                rel,
+            )
 
 
 _BASELINE_STATUSES = frozenset({"template", "established", "framework_meta"})
@@ -3807,9 +3905,11 @@ def run_selftest() -> int:
     task_record.mkdir(parents=True, exist_ok=True)
     (task_record / "worker-result.json").write_text(
         "{\n"
-        '  "command": "E:' + chr(92) * 2 + 'Conda' + chr(92) * 2 + 'envs' + chr(92) * 2
-        + 'vi' + chr(92) * 2 + 'python.exe -m pytest -q",\n'
-        '  "note": "run from E:' + chr(92) * 2 + 'Conda' + chr(92) * 2 + 'envs"\n'
+        '  "command": "C:' + chr(92) * 2 + 'Users' + chr(92) * 2 + 'example' + chr(92) * 2
+        + 'Miniconda3' + chr(92) * 2 + 'envs' + chr(92) * 2 + 'demo' + chr(92) * 2
+        + 'python.exe -m pytest -q",\n'
+        '  "note": "run from C:' + chr(92) * 2 + 'Users' + chr(92) * 2 + 'example'
+        + chr(92) * 2 + 'Miniconda3' + chr(92) * 2 + 'envs"\n'
         "}\n",
         encoding="utf-8",
     )
@@ -4366,7 +4466,43 @@ def run_selftest() -> int:
             except OSError:
                 pass
 
-    # 25. the repository's own setup must be self-consistent ----------------------------------------
+    # 25. stage-only PASS must not look like a full-task green light ----------------------------
+    stage_only_report = Report("canary")
+    stage_only_report.pass_qualifier = (
+        "stage-only: qa — other stages not checked; use --all before /ship"
+    )
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        code = stage_only_report.emit()
+    out = buf.getvalue()
+    canary(
+        "1.0.2: stage-only PASS line carries an explicit qualifier",
+        code == 0 and "stage-only: qa" in out and "other stages not checked" in out,
+        f"out={out!r}",
+    )
+
+    # 26. workflow gates_in_order must include gates for dispatched specialists -------------
+    wf_report = Report("canary")
+    check_workflow_gates_in_order(
+        Path("feature.yaml"),
+        "  - id: ux_design\n    agent: ux\ngates_in_order: [qa, review]\n",
+        wf_report,
+    )
+    canary(
+        "1.0.2: workflow that dispatches ux without listing ux in gates_in_order errors",
+        any(p.check == "workflow_gate_agent_missing" for p in wf_report.errors),
+        f"got {[p.check for p in wf_report.problems]}",
+    )
+
+    # 27. fixtures runner: TASK-900 must fire step_target_missing -----------------------------
+    fixture_code = run_fixtures()
+    canary(
+        "1.0.2: --fixtures verifies TASK-900 step_target_missing (and exits 0)",
+        fixture_code == 0,
+        f"exit={fixture_code}",
+    )
+
+    # 28. the repository's own setup must be self-consistent ----------------------------------------
     report = Report("canary")
     check_setup(report)
     canary(f"repository setup is self-consistent ({len(report.warnings)} warning(s))",
@@ -4507,6 +4643,65 @@ def run_ci_changed(base_ref: str) -> int:
     return exit_code
 
 
+def run_fixtures() -> int:
+    """Run known-bad (and optional known-good) fixture tasks under tasks/fixtures/.
+
+    Unlike --selftest canaries (unit-level checkers), fixtures exercise stage checkers against
+    complete-ish task directories. must_fire / must_not_fire make false positives visible.
+    """
+    fixtures_root = REPO_ROOT / "tasks" / "fixtures"
+    if not fixtures_root.is_dir():
+        print(f"ERROR: fixtures directory missing: {fixtures_root}", file=sys.stderr)
+        return 2
+
+    fixture_dirs = sorted(
+        path for path in fixtures_root.iterdir()
+        if path.is_dir() and path.name.startswith("TASK-") and (path / "fixture.yaml").is_file()
+    )
+    if not fixture_dirs:
+        print(f"ERROR: no TASK-*/fixture.yaml under {fixtures_root}", file=sys.stderr)
+        return 2
+
+    failures = 0
+    print("== fixtures")
+    for fixture_dir in fixture_dirs:
+        meta = parse_yaml((fixture_dir / "fixture.yaml").read_text(encoding="utf-8"))
+        if not isinstance(meta, dict):
+            print(f"  FAIL {fixture_dir.name}: fixture.yaml is not a mapping")
+            failures += 1
+            continue
+        stage = str(meta.get("stage") or "plan")
+        if stage not in STAGE_CHECKERS:
+            print(f"  FAIL {fixture_dir.name}: unknown stage {stage!r}")
+            failures += 1
+            continue
+        must_fire = {str(item) for item in (meta.get("must_fire") or [])}
+        must_not = {str(item) for item in (meta.get("must_not_fire") or [])}
+        report = Report(f"fixture {fixture_dir.name} :: {stage}")
+        STAGE_CHECKERS[stage](fixture_dir, report)
+        fired = {problem.check for problem in report.errors} | {
+            problem.check for problem in report.warnings
+        }
+        missing = sorted(must_fire - fired)
+        unexpected = sorted(must_not & fired)
+        defect = meta.get("defect_class") or "?"
+        if missing or unexpected:
+            failures += 1
+            print(
+                f"  FAIL {fixture_dir.name} ({defect}): missing={missing} unexpected={unexpected} "
+                f"fired={sorted(fired)}"
+            )
+        else:
+            print(f"  ok   {fixture_dir.name} ({defect}): fired {sorted(must_fire) or '∅'}")
+
+    print()
+    if failures:
+        print(f"FIXTURES: {failures} failure(s) - FAIL")
+        return 1
+    print(f"FIXTURES: {len(fixture_dirs)} fixture(s) verified - PASS")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Rgents artifact validator, gate invariant checker, and setup linter.",
@@ -4519,6 +4714,11 @@ def main() -> int:
     parser.add_argument("--all", action="store_true", help="run every stage check for the task")
     parser.add_argument("--check-setup", action="store_true", help="lint the repository's team configuration")
     parser.add_argument("--selftest", action="store_true", help="prove the invariants fire on known-bad input")
+    parser.add_argument(
+        "--fixtures",
+        action="store_true",
+        help="run tasks/fixtures/TASK-*/fixture.yaml assertions (must_fire / must_not_fire)",
+    )
     parser.add_argument(
         "--ci-changed",
         action="store_true",
@@ -4533,6 +4733,9 @@ def main() -> int:
 
     if args.selftest:
         return run_selftest()
+
+    if args.fixtures:
+        return run_fixtures()
 
     if args.ci_changed:
         return run_ci_changed(args.base)
@@ -4564,15 +4767,31 @@ def main() -> int:
         stages = applicable_stages(task_dir) if args.all else ([args.stage] if args.stage else ALL_STAGES)
         if args.all:
             print(f"   applicable stages for this task: {stages}")
+        stage_only = bool(args.stage) and not args.all
         for stage in stages:
             report = Report(f"task {task_dir.name} :: stage {stage}")
+            if stage_only:
+                report.pass_qualifier = (
+                    f"stage-only: {stage} — other stages not checked; "
+                    "use --all before /ship"
+                )
             STAGE_CHECKERS[stage](task_dir, report)
             log_path = write_validate_log(task_dir, stage, report)
             if log_path is not None:
                 report.note(f"validate log: {log_path.relative_to(REPO_ROOT).as_posix()}")
             exit_code = max(exit_code, report.emit())
 
-    if not any([args.artifact, args.check_setup, args.task, args.task_dir, args.all, args.ci_changed]):
+    if not any(
+        [
+            args.artifact,
+            args.check_setup,
+            args.task,
+            args.task_dir,
+            args.all,
+            args.ci_changed,
+            args.fixtures,
+        ]
+    ):
         parser.print_help()
         return 0
 

@@ -135,14 +135,14 @@ breaks a downstream gate; free-form nuance must be forced into fields.
 
 - **Status:** accepted
 - **Date:** 2026-09-22（收束 / 版本 2026-09-23）
-- **Framework release:** **1.0.0**（收束时）；后续补丁见 **1.0.1**（`CHANGELOG.md`：S1–S7、KI-005、C1 agent_cli）
+- **Framework release:** **1.0.0**（收束时）；后续见 **1.0.1** / **1.0.2**（`CHANGELOG.md`）
 - **Task:** correction backlog (batches A–D + N2/N3; main-thread bypass)
 - **Deciders:** human owner
-- **Closure:** 第一次设计修正结束；版本标记为 1.0.0。验证改由新开产品项目进行。下版首项见 `next-edition-notes.md` → N1。
+- **Closure:** 第一次设计修正结束；版本标记为 1.0.0。验证改由新开产品项目进行。后续开项（N1 拓扑、N4 诚实缺口/人签）记在维护者本地 `internal-notes.md`（不发布）。
 
 ### Context
 
-实测与设计评审暴露：可移植性误扫运行记录、审查三角模型同源、并行无隔离、trivial 分类可裁掉工序、门检会话内自证、无项目基线契约、播种后无本地 git 等。详见 `docs/architecture/correction-backlog.md`。
+实测与设计评审暴露：可移植性误扫运行记录、审查三角模型同源、并行无隔离、trivial 分类可裁掉工序、门检会话内自证、无项目基线契约、播种后无本地 git 等。落地摘要见 `CHANGELOG.md`（1.0.0+）。
 
 ### Decision
 

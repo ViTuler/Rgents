@@ -4,3 +4,10 @@
 .agent/tools/__pycache__/
 **/__pycache__/
 *.py[cod]
+
+# Local maintainer material — not published (design notes + reference audits)
+refers/
+docs/architecture/internal-notes.md
+docs/architecture/correction-backlog.md
+docs/architecture/next-edition-notes.md
+docs/architecture/sandbox-e2e-fix-tasks.md

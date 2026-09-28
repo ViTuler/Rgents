@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2 — 2026-09-28
+
+DeepSeek-aligned packaging fixes (cheap crack-sealing; N4 / other suggestions still deferred).
+
+- **Stage-only PASS:** `--stage X` success lines now read `RESULT: PASS (stage-only: X — other stages not checked; use --all before /ship)` so a green qa stage cannot be mistaken for a full-task pass.
+- **Workflow gates:** `check_setup` verifies `gates_in_order` aliases map to `GATE_ORDER`, and every dispatched specialist/reviewer agent has its gate listed. `feature.yaml` now includes `ux`. `incident.yaml` review `reads` no longer cites missing `design.json`.
+- **Fixtures:** `tasks/fixtures/TASK-900/` + `python .agent/tools/validate.py --fixtures` (`must_fire` / `must_not_fire`). TASK-900 asserts `step_target_missing`.
+- **CI:** `framework-ci.yml` adds `--fixtures` and a governance-docs job (`regenerate-governance-docs.py` + `git diff --exit-code`).
+- **Docs / version:** `VERSION` / manifest / AGENTS / README / zh guides → **1.0.2**.
+
 ## 1.0.1 — 2026-09-24 (docs/models/KI follow-ups through 2026-09-26)
 
 Sandbox E2E follow-ups and subsequent catalog/validator fixes (no framework-repo task lane; verified via `--selftest` + sandbox).
@@ -16,9 +26,9 @@ Sandbox E2E follow-ups and subsequent catalog/validator fixes (no framework-repo
 - **Packaging:** `.gitignore` is `product_owned` (create still seeds; upgrade does not overwrite).
 - **Ship:** Run `validate.py --task <ID> --all` before completion (fresh stage logs).
 - **Windows:** UTF-8 stdio reconfigure in `validate.py` / `archive_task.py`; docs warn against `conda run` for reading tool output (GBK pipe).
-- **Docs:** KI-005 / KI-006 / KI-007 moved to Resolved in `framework-known-issues.md`.
-- **E2E:** Sandbox S1 closed — confirmed trivial with **no** `plan.json` (see `sandbox-e2e-fix-tasks.md`).
+- **Docs:** KI-005 / KI-006 / KI-007 marked Resolved in `docs/knowledge/known-issues.md`.
+- **E2E:** Sandbox S1 closed — confirmed trivial with **no** `plan.json`.
 
 ## 1.0.0 — 2026-09-23
 
-First design-correction closure (C0–C7, N2/N3). See `docs/architecture/correction-backlog.md`.
+First design-correction closure (C0–C7, N2/N3). Details: this changelog and ADR-003 in `docs/architecture/decisions.md`.

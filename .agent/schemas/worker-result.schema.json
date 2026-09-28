@@ -273,7 +273,7 @@
                 },
                 "runtime": {
                     "type": "string",
-                    "description": "Language runtime and version actually used, e.g. 'Node 20.11' or 'Python 3.11 (conda env: vi)'."
+                    "description": "Language runtime and version actually used, e.g. 'Node 20.11' or 'Python 3.11 (conda env: <your-env>)'. Do not record machine-specific absolute paths."
                 },
                 "environment_manager": {
                     "type": "string",

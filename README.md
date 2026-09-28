@@ -1,6 +1,6 @@
 # Rgents
 
-**Version:** `1.0.1` (see `VERSION` and `.agent/framework-manifest.yaml → release`)
+**Version:** `1.0.2` (see `VERSION` and `.agent/framework-manifest.yaml → release`)
 
 [中文文档](docs/zh/README.zh-CN.md)
 
@@ -150,7 +150,7 @@ Rgents/
 │       └── seed_framework.py    # create/upgrade from a framework checkout (not copied into products)
 ├── docs/
 │   ├── agents/                  # responsibilities, permissions, protocols
-│   ├── architecture/            # overview, decisions (ADRs), conventions, correction notes
+│   ├── architecture/            # overview, decisions (ADRs), conventions
 │   ├── knowledge/               # project memory, lessons, known issues
 │   └── zh/                      # 中文使用手册
 └── tasks/
@@ -159,6 +159,9 @@ Rgents/
     ├── archive/
     └── _template/               # copy this to start a task by hand
 ```
+
+Maintainer-only reference audits and working correction notes stay local (`refers/`,
+`docs/architecture/internal-notes.md`) and are gitignored — they are not part of the public tree.
 
 ## Design influences
 
@@ -177,8 +180,6 @@ This framework was built after auditing two reference projects:
   chain, the five-field failure schema (Error / Symptom / Root Cause / Solution / Verification), star
   topology with conclusion-level returns, and the traceability triplet (design reference + requirement
   ID + quality gate) on every task.
-
-Full audits: `refers/_refs/_audit-jahnel.md`, `refers/_refs/_audit-pridiuksson.md`.
 
 ### Two corrections found by running it, not by reading it
 

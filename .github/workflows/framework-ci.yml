@@ -1,4 +1,4 @@
-# Lightweight framework CI (N3).
+# Lightweight framework CI (N3 + 1.0.2 governance pin / fixtures).
 # Shape and configuration only — does NOT re-run product tests.
 # validate trusts developer/QA reports; this workflow only checks invariants.
 
@@ -25,6 +25,17 @@ jobs:
       - name: Run selftest
         run: python .agent/tools/validate.py --selftest
 
+  fixtures:
+    name: validate --fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run fixture tasks
+        run: python .agent/tools/validate.py --fixtures
+
   check-setup:
     name: validate --check-setup
     runs-on: ubuntu-latest
@@ -35,6 +46,20 @@ jobs:
           python-version: "3.12"
       - name: Run check-setup
         run: python .agent/tools/validate.py --check-setup
+
+  governance-docs:
+    name: governance docs up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Regenerate and fail on drift
+        run: |
+          set -euo pipefail
+          python .agent/regenerate-governance-docs.py
+          git diff --exit-code -- docs/agents/permissions.md docs/agents/responsibilities.md
 
   changed-active-tasks:
     name: validate --ci-changed
