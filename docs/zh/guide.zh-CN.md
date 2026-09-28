@@ -1,7 +1,7 @@
 # Rgents 使用说明（中文）
 
 > 面向「框架部署、搭建任务、执行校验门禁」的操作手册。  
-> 版本：`1.0.3`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）  
+> 版本：`1.0.4`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）  
 > 概念总览见 [`README.zh-CN.md`](./README.zh-CN.md)；角色细节见 [`roles.zh-CN.md`](./roles.zh-CN.md)；工作流与状态机见 [`workflow.zh-CN.md`](./workflow.zh-CN.md)。
 
 ---

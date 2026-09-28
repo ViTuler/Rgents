@@ -1,6 +1,6 @@
 # 工作流、门禁与状态机
 
-> 版本：`1.0.3`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）
+> 版本：`1.0.4`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）
 
 本文说明任务如何在团队中流动、门禁如何判定、失败如何路由，以及状态如何被记录和续跑
 

@@ -1,6 +1,6 @@
 # 角色手册 — 12 个角色的职责、边界与协作
 
-> 版本：`1.0.3`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）
+> 版本：`1.0.4`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）
 
 本文是 `.cursor/agents/**` 的中文说明。**当两者不一致时，以 agent 定义文件为准**——那是模型实际读到的契约。
 

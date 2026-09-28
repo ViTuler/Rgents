@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.4 — 2026-09-28
+
+Seed hygiene: product `.gitignore` must not inherit the framework checkout's maintainer-only ignores.
+
+- **Seed fix:** product create no longer copies the framework checkout's `.gitignore` (which ignores `docs/architecture/` and `refers/`). Create scaffolds `.gitignore` from `.agent/templates/gitignore` (runtime scratch only). `.gitignore` remains `product_owned` — upgrade will not rewrite it.
+- **Upgrading an already-seeded product:** `upgrade` never rewrites `.gitignore` (`product_owned`). Delete the `refers/` and `docs/architecture/` lines by hand — otherwise your product's own architecture docs are silently gitignored. New creates are unaffected.
+- **Version:** `VERSION` / manifest / AGENTS / README / zh guides → **1.0.4**.
+
 ## 1.0.3 — 2026-09-28
 
 Public launch release. Products comparing `framework-manifest.yaml → release` will see this bump and can pull the seed hygiene fixes.

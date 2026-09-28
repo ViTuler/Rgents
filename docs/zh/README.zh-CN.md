@@ -1,6 +1,6 @@
 # Rgents — 中文总览
 
-> **框架版本：** `1.0.3`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）  
+> **框架版本：** `1.0.4`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）  
 > **许可证：** [Apache License 2.0](../../LICENSE)（Copyright 2026 ViTuler）
 
 一套用于 Cursor 的**多 Agent 软件开发团队**。它仿照现实小型开发团队，组建了一个小型软件组织：
@@ -168,7 +168,7 @@ _产出文件好像默认写为英文，本人并未测试中文_
 | 团队配置错误 | `--check-setup`：角色注册、frontmatter 字段、必需小节、工作流引用的角色是否存在 |
 
 自检（`--selftest`）会用**已知有缺陷的输入**逐个触发上述每一条不变量，证明它们真的会报警，
-而不是只写在文档里。canary 数量随版本增长；以命令输出为准（1.0.3 量级约 50+ 项）。
+而不是只写在文档里。canary 数量随版本增长；以命令输出为准（1.0.4 量级约 50+ 项）。
 
 ## 示例任务
 

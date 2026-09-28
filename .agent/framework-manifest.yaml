@@ -5,16 +5,17 @@
 version: 1
 framework_id: rgents
 # Semver of this framework release. Bump when shipping changes seeded products should pull.
-release: "1.0.3"
+release: "1.0.4"
 
 # Top-level surfaces copied on create (then pruned / re-scaffolded).
-# Product architecture docs are NOT listed here — create scaffolds them from
-# `.agent/templates/architecture/` as product_owned (see seed_framework.py).
+# Product architecture docs and .gitignore are NOT listed here — create scaffolds
+# them from `.agent/templates/` as product_owned (see seed_framework.py).
+# Do not copy the framework checkout's .gitignore: it ignores docs/architecture/
+# and refers/ for maintainer-only notes.
 create_surfaces:
     - AGENTS.md
     - .cursor
     - .agent
-    - .gitignore
     - .github
     - VERSION
     - docs/agents
@@ -44,7 +45,9 @@ replaceable:
     - docs/agents/
 
 # Never overwrite on upgrade (product truth).
-# .gitignore: create still seeds a starter file; upgrade must not wipe product rules (e.g. out/).
+# .gitignore: create seeds from `.agent/templates/gitignore`; upgrade must not wipe
+# product rules (e.g. out/). Already-seeded products that inherited the framework
+# checkout's ignores must manually drop `docs/architecture/` / `refers/` lines.
 # docs/architecture/: optional product docs; scaffolded once from templates on create.
 product_owned:
     - .gitignore

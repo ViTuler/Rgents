@@ -158,6 +158,13 @@ def scaffold_product_docs_and_baseline(framework: Path, target: Path) -> None:
     baseline_dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(baseline_tpl, baseline_dst)
 
+    # Product .gitignore from template — never the framework checkout's file
+    # (which ignores docs/architecture/ and refers/ for maintainer-only notes).
+    gitignore_tpl = framework / ".agent" / "templates" / "gitignore"
+    if not gitignore_tpl.is_file():
+        raise SystemExit(f"framework template missing: {gitignore_tpl}")
+    shutil.copy2(gitignore_tpl, target / ".gitignore")
+
 
 # Back-compat alias for callers/tests that still use the old name.
 scaffold_knowledge_and_baseline = scaffold_product_docs_and_baseline
@@ -233,10 +240,11 @@ def cmd_create(args: argparse.Namespace) -> int:
     if len(pruned) > 20:
         print(f"  pruned … {len(pruned) - 20} more")
 
-    print("\n== 2. product-owned docs + baseline from templates")
+    print("\n== 2. product-owned docs + baseline + gitignore from templates")
     scaffold_product_docs_and_baseline(FRAMEWORK_ROOT, target)
     print("  docs/knowledge/* from templates")
     print("  docs/architecture/* from templates (product_owned; not upgraded)")
+    print("  .gitignore from templates/gitignore (runtime scratch only)")
     print("  .agent/project-baseline.yaml (status: template)")
 
     seeded = write_seeded_from(target, manifest, operation="create")

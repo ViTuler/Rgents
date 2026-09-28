@@ -11,6 +11,7 @@ reconstructing conventions from memory.
 | `task/` | rare hand-start: follow its README under `tasks/active/<TASK-ID>/` (there is no `tasks/_template/`) |
 | `knowledge/` | product-owned starters → `docs/knowledge/` on seed create |
 | `architecture/` | optional product-owned starters → `docs/architecture/` on seed create (never upgraded) |
+| `gitignore` | → product `.gitignore` on seed create (runtime scratch only; not the framework checkout's file) |
 | `project-baseline.yaml` | → `.agent/project-baseline.yaml` on seed create |
 
 ## After adding any of these

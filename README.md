@@ -1,6 +1,6 @@
 # Rgents
 
-**Version:** `1.0.3` (see `VERSION` and `.agent/framework-manifest.yaml → release`)
+**Version:** `1.0.4` (see `VERSION` and `.agent/framework-manifest.yaml → release`)
 
 **License:** [Apache License 2.0](LICENSE)
 

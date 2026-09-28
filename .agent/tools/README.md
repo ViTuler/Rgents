@@ -45,8 +45,9 @@ python .agent/tools/seed_framework.py create --target <new-project-path>
 
 - Refuses a non-empty directory.
 - Copies framework surfaces listed in the manifest; strips `__pycache__` / selftest scratch / provisioning tools.
-- Re-scaffolds `docs/knowledge/*`, `docs/architecture/*`, and `.agent/project-baseline.yaml` from
-  **templates** (never the framework repo's own architecture ADRs or knowledge facts).
+- Re-scaffolds `docs/knowledge/*`, `docs/architecture/*`, `.gitignore`, and
+  `.agent/project-baseline.yaml` from **templates** (never the framework repo's own
+  architecture ADRs, knowledge facts, or maintainer-only ignore rules).
 - Writes `.agent/seeded-from.yaml` (release + framework commit).
 - Runs `init_project.py` (local git, no remote). Does **not** create the first commit.
 
@@ -88,6 +89,7 @@ Install/login CLI when you need the live full catalog: https://cursor.com/docs/c
 | Path | Why |
 |---|---|
 | `README.md` | the product repository writes its own |
+| `.gitignore` (framework checkout) | products get `.agent/templates/gitignore` (no `docs/architecture/` / `refers/`) |
 | `docs/architecture/` (framework-filled) | products get blank templates from `.agent/templates/architecture/` |
 | `tasks/**` | the previous project's task history |
 | provisioning tools | `seed_framework.py`, bootstrap scripts — see table above |
@@ -99,7 +101,9 @@ Install/login CLI when you need the live full catalog: https://cursor.com/docs/c
 
 Copying `docs/knowledge/` or `docs/architecture/` wholesale would ship **the framework's own
 accumulated facts and ADRs** into the new project. Scaffolding from `.agent/templates/knowledge/` and
-`.agent/templates/architecture/` (plus the project-baseline template) is the fix. The same class of
-trap applies to `.agent/framework-known-issues.md`: it is stripped on create so products do not inherit
-the framework defect list. Upgrade must not reintroduce those traps: knowledge, architecture, and
-baseline stay product-owned forever.
+`.agent/templates/architecture/` (plus the project-baseline template) is the fix. Copying the
+framework checkout's `.gitignore` would silently ignore product `docs/architecture/` — products
+get `.agent/templates/gitignore` instead. The same class of trap applies to
+`.agent/framework-known-issues.md`: it is stripped on create so products do not inherit the
+framework defect list. Upgrade must not reintroduce those traps: knowledge, architecture,
+`.gitignore`, and baseline stay product-owned forever.
