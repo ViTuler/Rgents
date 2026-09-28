@@ -1,6 +1,7 @@
 # Rgents — 中文总览
 
-> **框架版本：** `1.0.2`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）
+> **框架版本：** `1.0.2`（见仓库根目录 `VERSION` 与 `.agent/framework-manifest.yaml → release`）  
+> **许可证：** [Apache License 2.0](../../LICENSE)（Copyright 2026 ViTuler）
 
 一套用于 Cursor 的**多 Agent 软件开发团队**。它不是一个"角色提示词合集"，而是一个小型软件组织：
 1 个协调者、5 个核心角色、6 个按风险按需激活的专家角色，加上产物契约与**可执行的质量门禁**。

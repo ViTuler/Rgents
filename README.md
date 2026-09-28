@@ -2,6 +2,8 @@
 
 **Version:** `1.0.2` (see `VERSION` and `.agent/framework-manifest.yaml → release`)
 
+**License:** [Apache License 2.0](LICENSE)
+
 [中文文档](docs/zh/README.zh-CN.md)
 
 A **multi-agent software development organization** for Cursor (and any agent runtime that reads
@@ -222,6 +224,12 @@ both. It reported the blocker and stopped. That is the `NON-GOALS` boundary doin
 
 `.cursor/**`, `.agent/**`, and `AGENTS.md` are **human-owned**. Agents may propose changes through an
 artifact; they may not apply them. See `docs/agents/protocols.md`.
+
+## License
+
+Copyright 2026 ViTuler
+
+Licensed under the Apache License, Version 2.0. See [`LICENSE`](LICENSE).
 
 ## 中文文档
 

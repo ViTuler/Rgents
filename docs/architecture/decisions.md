@@ -146,7 +146,7 @@ breaks a downstream gate; free-form nuance must be forced into fields.
 
 ### Decision
 
-按该清单冻结的 C0–C7 方案实施；批次 A(C0/C6/C7) → B(C3/C4) → C(C5/C1) → D(C2)。会话外 CI 重跑测试本包不做。
+按已冻结的 C0–C7 方案实施；批次 A(C0/C6/C7) → B(C3/C4) → C(C5/C1) → D(C2)。会话外 CI 重跑产品测试本包不做。
 
 ### Consequences
 

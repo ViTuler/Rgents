@@ -45,10 +45,15 @@ for path in sorted(AGENTS.rglob("*.md")):
     ro = re.search(r"^readonly:\s*(\S+)\s*$", fm, re.M)
     non_goals = []
     if "## NON-GOALS" in body:
+        # Join soft-wrapped continuation lines (indented, no leading "- ").
+        # Dropping them produced truncated bullets in permissions.md.
         for line in body.split("## NON-GOALS", 1)[1].splitlines():
-            s = line.strip()
-            if s.startswith("- "):
-                non_goals.append(s[2:].strip())
+            if line.startswith("## "):
+                break
+            if line.startswith("- "):
+                non_goals.append(line[2:].strip())
+            elif non_goals and line[:1] in (" ", "\t") and line.strip():
+                non_goals[-1] = f"{non_goals[-1]} {line.strip()}"
     records[name] = {
         "path": path.relative_to(ROOT).as_posix(),
         "readonly": ro.group(1) if ro else "(unset)",
