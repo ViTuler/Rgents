@@ -1,4 +1,4 @@
-# Lightweight framework CI (N3 + 1.0.2 governance pin / fixtures).
+# Lightweight framework CI (N3 + 1.0.3 governance pin / fixtures).
 # Shape and configuration only — does NOT re-run product tests.
 # validate trusts developer/QA reports; this workflow only checks invariants.
 

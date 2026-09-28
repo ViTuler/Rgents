@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.0.3 — 2026-09-28
 
-- **Publish hygiene:** `docs/architecture/` is gitignored (local maintainer notes only); removed from the public tree. Product scaffolds still come from `.agent/templates/architecture/`.
+Public launch release. Products comparing `framework-manifest.yaml → release` will see this bump and can pull the seed hygiene fixes.
+
 - **Seed hygiene (A1):** `never_copy_names` strips `framework-known-issues.md` and `regenerate-governance-docs.py` from product creates; docs updated so products no longer inherit the framework defect list or the governance regenerator.
-- **Docs / config alignment (DeepSeek audit):** `docs/agents/**` listed in `AGENTS.md` governance; database/ux `stage_position` aligned with workflows; `/orchestrator` wording corrected; `design_defect` terminology; human-intervention list (8); reviewer C5 dimension; agent skeleton / templates / ADR-003 language consistency; CHANGELOG header restored.
+- **Publish hygiene:** `docs/architecture/` is gitignored (local maintainer notes only); removed from the public tree. Product scaffolds still come from `.agent/templates/architecture/`.
+- **Docs / config alignment (DeepSeek audit):** `docs/agents/**` listed in `AGENTS.md` governance; database/ux `stage_position` aligned with workflows; `/orchestrator` wording corrected; `design_defect` terminology; human-intervention list (8); reviewer C5 dimension; agent skeleton / templates / ADR-003 language consistency.
+- **Version:** `VERSION` / manifest / AGENTS / README / zh guides → **1.0.3**.
 
 ## 1.0.2 — 2026-09-28
 
