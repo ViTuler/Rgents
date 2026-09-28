@@ -1,11 +1,14 @@
-# Copy this directory to `tasks/active/<TASK-ID>/` to start a task by hand.
+# Hand-start a task under `tasks/active/<TASK-ID>/` (rare).
 #
-# In normal use you do not do this: `/spec` creates the task directory and the
-# orchestrator writes `intake.json`. This template exists for two cases:
-#   1. resuming or repairing a task whose artifacts are incomplete
-#   2. working without the slash commands available
+# Normal path: `/spec` creates the directory and the orchestrator writes `intake.json`.
+# This template exists for:
+#   1. repairing a task whose artifacts are incomplete
+#   2. working without slash commands
 #
-# Fill in the artifacts in pipeline order. The validator checks each one:
+# There is no `tasks/_template/` folder in the repo — follow this README when placing
+# artifacts under `tasks/active/<TASK-ID>/`.
+#
+# Validate in pipeline order, for example:
 #   python .agent/tools/validate.py --task <TASK-ID> --stage plan
 #   python .agent/tools/validate.py --task <TASK-ID> --stage implementation
 #   python .agent/tools/validate.py --task <TASK-ID> --stage qa

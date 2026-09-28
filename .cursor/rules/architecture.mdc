@@ -11,7 +11,10 @@ globs:
 
 ## Fit the system before improving it
 
-- Read the existing architecture overview and ADRs (`docs/architecture/`) before proposing structure.
+- If the project keeps architecture docs (often under `docs/architecture/`), read them before
+  proposing structure. If they are missing, learn from the codebase and
+  `docs/knowledge/project-memory.md` instead — do **not** invent a parallel architecture doc tree
+  unasked. Rgents does not require products to use `docs/architecture/`.
 - **The existing architecture is the default.** Adopting it requires no justification; departing from it does.
 - Every new abstraction, layer, or module boundary needs a stated reason: what existing mechanism is
   insufficient, and why.
@@ -41,8 +44,9 @@ globs:
 
 ## Record decisions
 
-- Any non-obvious, hard-to-reverse decision gets an ADR in `docs/architecture/decisions.md`:
-  **context, decision, consequences, alternatives considered.**
+- Any non-obvious, hard-to-reverse decision gets an ADR where **this project** records them (commonly
+  `docs/architecture/decisions.md` when that file exists): **context, decision, consequences,
+  alternatives considered.**
 - Record the alternatives you rejected. A decision without its rejected alternatives will be re-litigated.
 - If you cannot explain a design choice in two sentences, it is probably not understood well enough yet.
 

@@ -5,88 +5,88 @@
 name: framework-ci
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+    pull_request:
+    push:
+        branches: [main]
 
 concurrency:
-  group: framework-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+    group: framework-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+    cancel-in-progress: true
 
 jobs:
-  selftest:
-    name: validate --selftest
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Run selftest
-        run: python .agent/tools/validate.py --selftest
+    selftest:
+        name: validate --selftest
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.12"
+            - name: Run selftest
+              run: python .agent/tools/validate.py --selftest
 
-  fixtures:
-    name: validate --fixtures
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Run fixture tasks
-        run: python .agent/tools/validate.py --fixtures
+    fixtures:
+        name: validate --fixtures
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.12"
+            - name: Run fixture tasks
+              run: python .agent/tools/validate.py --fixtures
 
-  check-setup:
-    name: validate --check-setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Run check-setup
-        run: python .agent/tools/validate.py --check-setup
+    check-setup:
+        name: validate --check-setup
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.12"
+            - name: Run check-setup
+              run: python .agent/tools/validate.py --check-setup
 
-  governance-docs:
-    name: governance docs up to date
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Regenerate and fail on drift
-        run: |
-          set -euo pipefail
-          python .agent/regenerate-governance-docs.py
-          git diff --exit-code -- docs/agents/permissions.md docs/agents/responsibilities.md
+    governance-docs:
+        name: governance docs up to date
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.12"
+            - name: Regenerate and fail on drift
+              run: |
+                  set -euo pipefail
+                  python .agent/regenerate-governance-docs.py
+                  git diff --exit-code -- docs/agents/permissions.md docs/agents/responsibilities.md
 
-  changed-active-tasks:
-    name: validate --ci-changed
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # Need enough history for base...HEAD on PRs and push events.
-          fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Shape-check changed tasks/active ( --all )
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-          BEFORE_SHA: ${{ github.event.before }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            git fetch origin "$BASE_REF" --depth=1
-            BASE="origin/${BASE_REF}"
-          else
-            BASE="${BEFORE_SHA}"
-            if [ -z "$BASE" ] || echo "$BASE" | grep -Eq '^0+$'; then
-              echo "No usable before SHA; skipping ci-changed."
-              exit 0
-            fi
-          fi
-          python .agent/tools/validate.py --ci-changed --base "$BASE"
+    changed-active-tasks:
+        name: validate --ci-changed
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  # Need enough history for base...HEAD on PRs and push events.
+                  fetch-depth: 0
+            - uses: actions/setup-python@v5
+              with:
+                  python-version: "3.12"
+            - name: Shape-check changed tasks/active ( --all )
+              env:
+                  EVENT_NAME: ${{ github.event_name }}
+                  BASE_REF: ${{ github.base_ref }}
+                  BEFORE_SHA: ${{ github.event.before }}
+              run: |
+                  set -euo pipefail
+                  if [ "$EVENT_NAME" = "pull_request" ]; then
+                    git fetch origin "$BASE_REF" --depth=1
+                    BASE="origin/${BASE_REF}"
+                  else
+                    BASE="${BEFORE_SHA}"
+                    if [ -z "$BASE" ] || echo "$BASE" | grep -Eq '^0+$'; then
+                      echo "No usable before SHA; skipping ci-changed."
+                      exit 0
+                    fi
+                  fi
+                  python .agent/tools/validate.py --ci-changed --base "$BASE"

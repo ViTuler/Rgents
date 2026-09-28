@@ -37,8 +37,9 @@ The exact commands agents should run. Do not guess these — record them.
 
 ## Architecture
 
-Summary of the system's shape. Keep the detail in `docs/architecture/overview.md`; keep here only what
-an agent needs to avoid a wrong assumption.
+Summary of the system's shape. If the project keeps an architecture overview (often
+`docs/architecture/overview.md`), put detail there; keep here only what an agent needs to avoid a
+wrong assumption. Rgents does not require that path.
 
 - **Layering:**
 - **Where business logic lives:**
@@ -49,8 +50,8 @@ an agent needs to avoid a wrong assumption.
 
 ## Binding decisions
 
-Decisions that are settled and must not be relitigated. Full records live in
-`docs/architecture/decisions.md`.
+Decisions that are settled and must not be relitigated. Full records live where the project keeps
+ADRs (often `docs/architecture/decisions.md` when that file exists).
 
 | Decision | Rationale (one line) | Do not |
 |---|---|---|

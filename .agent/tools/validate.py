@@ -3012,7 +3012,6 @@ _MACHINE_PATH_PATTERNS = [
 # portable" in conflict. `refers/` quotes other repos' paths by design.
 _PORTABILITY_EXEMPT_PREFIXES = (
     "tasks/",
-    "refers/",
     ".rgents/",
     ".agent/.selftest",
 )

@@ -124,7 +124,7 @@ Handoff protocol and artifact ownership: `docs/agents/protocols.md`.
 - **Reviewer never writes production code.** It requests changes; the developer makes them.
 - **Security findings are blocking** at `critical`/`high` severity. They cannot be waived by the developer or the tech lead.
 - **QA never fixes production code**, and never edits another agent's report.
-- **No agent edits `.cursor/rules/**`, `.cursor/agents/**`, `.agent/**`, or `AGENTS.md`.** These are
+- **No agent edits `.cursor/rules/**`, `.cursor/agents/**`, `.agent/**`, `docs/agents/**`, or `AGENTS.md`.** These are
   human-owned governance surfaces. Agents may *propose* changes via an artifact.
 - **No agent merges, force-pushes, skips hooks, or pushes to a protected branch.**
 

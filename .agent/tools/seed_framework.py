@@ -12,7 +12,7 @@ Upgrade (existing seeded project)
 Design
 ------
 * **Framework-owned** paths come from ``.agent/framework-manifest.yaml → replaceable``.
-* **Product-owned** paths (baseline, knowledge, tasks, available.yaml, …) are never replaced.
+* **Product-owned** paths (baseline, knowledge, architecture docs, tasks, available.yaml, …) are never replaced.
 * Provisioning tools (bootstrap / this script) are not left inside the product.
 * ``.agent/seeded-from.yaml`` records release + git HEAD at seed/upgrade time.
 * Does **not** create the first commit or add a remote.
@@ -128,16 +128,26 @@ def prune_never_copy(target: Path, skip_names: set[str]) -> list[str]:
     return removed
 
 
-def scaffold_knowledge_and_baseline(framework: Path, target: Path) -> None:
-    template_dir = framework / ".agent" / "templates" / "knowledge"
+def scaffold_product_docs_and_baseline(framework: Path, target: Path) -> None:
+    """Copy product-owned starters from templates (never the framework repo's own filled docs)."""
+    knowledge_dir = framework / ".agent" / "templates" / "knowledge"
     for name, dest_rel in (
         ("known-issues.md", Path("docs") / "knowledge" / "known-issues.md"),
         ("project-memory.md", Path("docs") / "knowledge" / "project-memory.md"),
     ):
-        src = template_dir / name
+        src = knowledge_dir / name
         if not src.is_file():
             raise SystemExit(f"framework template missing: {src}")
         dst = target / dest_rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+
+    architecture_dir = framework / ".agent" / "templates" / "architecture"
+    for name in ("overview.md", "decisions.md", "conventions.md"):
+        src = architecture_dir / name
+        if not src.is_file():
+            raise SystemExit(f"framework template missing: {src}")
+        dst = target / "docs" / "architecture" / name
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
 
@@ -147,6 +157,10 @@ def scaffold_knowledge_and_baseline(framework: Path, target: Path) -> None:
     baseline_dst = target / ".agent" / "project-baseline.yaml"
     baseline_dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(baseline_tpl, baseline_dst)
+
+
+# Back-compat alias for callers/tests that still use the old name.
+scaffold_knowledge_and_baseline = scaffold_product_docs_and_baseline
 
 
 def write_seeded_from(target: Path, manifest: dict, *, operation: str) -> Path:
@@ -219,9 +233,10 @@ def cmd_create(args: argparse.Namespace) -> int:
     if len(pruned) > 20:
         print(f"  pruned … {len(pruned) - 20} more")
 
-    print("\n== 2. knowledge + baseline from templates")
-    scaffold_knowledge_and_baseline(FRAMEWORK_ROOT, target)
+    print("\n== 2. product-owned docs + baseline from templates")
+    scaffold_product_docs_and_baseline(FRAMEWORK_ROOT, target)
     print("  docs/knowledge/* from templates")
+    print("  docs/architecture/* from templates (product_owned; not upgraded)")
     print("  .agent/project-baseline.yaml (status: template)")
 
     seeded = write_seeded_from(target, manifest, operation="create")

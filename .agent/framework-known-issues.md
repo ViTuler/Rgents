@@ -4,11 +4,12 @@ Problems here are **known and deliberately not being fixed**. They are recorded 
 humans stop rediscovering them, stop reporting them as new findings, and stop "fixing" them as scope
 creep in an unrelated task.
 
-**This file lives under `.agent/` on purpose.** It is framework knowledge, and `.agent/**` is a
-governance surface that is **not** copied into a product repository. `docs/knowledge/` **is** copied
-(bootstrap: `Copy-Tree 'docs/knowledge'`), so a framework defect recorded there would ship into every
-new project and appear, on first read, to be a defect of that project. Accepted problems in a project
-the team is working on belong in **that project's** `docs/knowledge/known-issues.md`.
+**This file lives under `.agent/` on purpose, and it must stay in the framework checkout.**
+`seed_framework.py create` copies `.agent/` then **strips** `framework-known-issues.md` via
+`never_copy_names` so product repositories do not inherit the framework's defect list.
+`docs/knowledge/` is product-owned (scaffolded from templates): never record framework defects there,
+or they would look like defects of every new project. Accepted problems in a product the team is
+building belong in **that project's** `docs/knowledge/known-issues.md`.
 
 Each entry records *why* it is accepted. An accepted issue without a stated reason is
 indistinguishable from an oversight.

@@ -28,10 +28,12 @@ This is a platform constraint, not a preference. Cursor maintains two separate l
 | The slash-command registry (type `/` in chat) | every agent in `.cursor/agents/`, including this one |
 | The Task tool's `subagent_type` enum | Cursor's built-in agents only |
 
-A project agent is therefore reachable when a human invokes it, and **not** reachable when another
-agent calls `Task(subagent_type=...)`. Attempting it fails with a message like *"subagent type
-orchestrator is not available in this session"*. And even if it were reachable, a subagent's own
-dispatch capacity is limited, so a subagent orchestrator could not then dispatch the core roles.
+A project agent may be invokable from Cursor's agent/slash UI when present, and **not** when another
+agent calls `Task(subagent_type=...)`. Attempting the latter fails with a message like *"subagent type
+orchestrator is not available in this session"*. This repository's **user-facing** entry commands are
+`/spec`, `/design`, `/build`, `/verify`, `/review-code`, `/ship`, and `/triage` under
+`.cursor/commands/` — there is **no** `/orchestrator` command file. Prefer those commands (or adopt
+the orchestrator role in the main thread) rather than inventing a `/orchestrator` slash.
 
 Therefore:
 

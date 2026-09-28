@@ -8,66 +8,71 @@ framework_id: rgents
 release: "1.0.2"
 
 # Top-level surfaces copied on create (then pruned / re-scaffolded).
+# Product architecture docs are NOT listed here — create scaffolds them from
+# `.agent/templates/architecture/` as product_owned (see seed_framework.py).
 create_surfaces:
-  - AGENTS.md
-  - .cursor
-  - .agent
-  - .gitignore
-  - .github
-  - VERSION
-  - docs/agents
-  - docs/knowledge
-  - docs/architecture
+    - AGENTS.md
+    - .cursor
+    - .agent
+    - .gitignore
+    - .github
+    - VERSION
+    - docs/agents
+    - docs/knowledge
 
 # On upgrade: replace these paths from the framework (repo-relative, trailing / = directory).
 # Product-owned paths below are never in this list.
 replaceable:
-  - AGENTS.md
-  - .cursor/
-  - .github/workflows/
-  - VERSION
-  - .agent/config.yaml
-  - .agent/schemas/
-  - .agent/workflows/
-  - .agent/templates/
-  - .agent/models/seed.yaml
-  - .agent/framework-manifest.yaml
-  - .agent/tools/validate.py
-  - .agent/tools/archive_task.py
-  - .agent/tools/init_project.py
-  - .agent/tools/init_project.cmd
-  - .agent/tools/init_project.ps1
-  - .agent/tools/init_project.sh
-  - .agent/tools/parallel_worktree.py
-  - .agent/tools/README.md
-  - docs/agents/
-  - docs/architecture/
+    - AGENTS.md
+    - .cursor/
+    - .github/workflows/
+    - VERSION
+    - .agent/config.yaml
+    - .agent/schemas/
+    - .agent/workflows/
+    - .agent/templates/
+    - .agent/models/seed.yaml
+    - .agent/framework-manifest.yaml
+    - .agent/tools/validate.py
+    - .agent/tools/archive_task.py
+    - .agent/tools/init_project.py
+    - .agent/tools/init_project.cmd
+    - .agent/tools/init_project.ps1
+    - .agent/tools/init_project.sh
+    - .agent/tools/parallel_worktree.py
+    - .agent/tools/README.md
+    - docs/agents/
 
 # Never overwrite on upgrade (product truth).
 # .gitignore: create still seeds a starter file; upgrade must not wipe product rules (e.g. out/).
+# docs/architecture/: optional product docs; scaffolded once from templates on create.
 product_owned:
-  - .gitignore
-  - .agent/project-baseline.yaml
-  - .agent/seeded-from.yaml
-  - .agent/models/available.yaml
-  - docs/knowledge/
-  - tasks/
-  - src/
-  - README.md
+    - .gitignore
+    - .agent/project-baseline.yaml
+    - .agent/seeded-from.yaml
+    - .agent/models/available.yaml
+    - docs/knowledge/
+    - docs/architecture/
+    - tasks/
+    - src/
+    - README.md
 
 # Directory / file name patterns stripped after copy and never upgraded in.
+# Framework-checkout-only knowledge must not land in product repos (see framework-known-issues.md).
 never_copy_names:
-  - __pycache__
-  - .selftest-scratch
-  - .selftest-validate-log
-  - .selftest-parallel
-  - .selftest-dup
-  - .selftest-portability
-  - .selftest-repo-check
-  - .rgents
+    - __pycache__
+    - .selftest-scratch
+    - .selftest-validate-log
+    - .selftest-parallel
+    - .selftest-dup
+    - .selftest-portability
+    - .selftest-repo-check
+    - .rgents
+    - framework-known-issues.md
+    - regenerate-governance-docs.py
 
 # Tools that act ON a project — remove from create target; do not install on upgrade.
 provisioning_tools:
-  - bootstrap-project.ps1
-  - bootstrap-product-skeleton.ps1
-  - seed_framework.py
+    - bootstrap-project.ps1
+    - bootstrap-product-skeleton.ps1
+    - seed_framework.py

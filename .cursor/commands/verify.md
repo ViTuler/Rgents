@@ -26,8 +26,9 @@ Run the verification gates for a task.
    - findings with reproduction, expected vs actual, and **the role that owns the defect**
    - `not_verified` — everything it could not check, and why
 
-3. Any specialist activated at `stage_position: parallel_with_qa` runs alongside: `security`,
-   `performance`, `data`.
+3. Any specialist activated at `stage_position: parallel_with_qa` runs alongside QA when the workflow
+   places it there: typically `security`, `performance`, `data`, and `database` (`db-report.json`).
+   `ux` is scheduled earlier (`before_implementation` on feature) when activated — not at `/verify`.
 
 ## The gate conditions
 

@@ -11,6 +11,7 @@ Tools here act **on** a project. They are not part of a product application's bu
 | `seed_framework.py` | from the **framework** checkout, pointed at a product | **no** — create / upgrade provisioning |
 | `bootstrap-project.ps1` | thin wrapper → `seed_framework.py create` | **no** — removed from the target |
 | `bootstrap-product-skeleton.ps1` | from the framework, via `--with-product-skeleton` | **no** — same reason |
+| `../regenerate-governance-docs.py` | framework checkout / CI | **no** — stripped on create (`never_copy_names`); regenerates `docs/agents/permissions.md` + `responsibilities.md` |
 
 ## Why some tools are removed from the target
 
@@ -44,7 +45,8 @@ python .agent/tools/seed_framework.py create --target <new-project-path>
 
 - Refuses a non-empty directory.
 - Copies framework surfaces listed in the manifest; strips `__pycache__` / selftest scratch / provisioning tools.
-- Re-scaffolds `docs/knowledge/*` and `.agent/project-baseline.yaml` from **templates** (never the framework's own facts).
+- Re-scaffolds `docs/knowledge/*`, `docs/architecture/*`, and `.agent/project-baseline.yaml` from
+  **templates** (never the framework repo's own architecture ADRs or knowledge facts).
 - Writes `.agent/seeded-from.yaml` (release + framework commit).
 - Runs `init_project.py` (local git, no remote). Does **not** create the first commit.
 
@@ -56,7 +58,7 @@ python .agent/tools/seed_framework.py upgrade --target <product-path> --yes
 ```
 
 - Replaces only `replaceable` paths from the manifest.
-- Never touches `product_owned` (baseline, knowledge, tasks, `available.yaml`, …).
+- Never touches `product_owned` (baseline, knowledge, **architecture**, tasks, `available.yaml`, …).
 - Backs up prior copies under `.rgents/upgrade-backups/<date>/`.
 - Rewrites `.agent/seeded-from.yaml`.
 
@@ -85,14 +87,19 @@ Install/login CLI when you need the live full catalog: https://cursor.com/docs/c
 
 | Path | Why |
 |---|---|
-| `refers/` | reference reading for the framework's authors; inert at runtime |
 | `README.md` | the product repository writes its own |
+| `docs/architecture/` (framework-filled) | products get blank templates from `.agent/templates/architecture/` |
 | `tasks/**` | the previous project's task history |
-| provisioning tools | see table above |
-| `__pycache__` / `.selftest*` | scratch; never ship |
+| provisioning tools | `seed_framework.py`, bootstrap scripts — see table above |
+| `framework-known-issues.md` | framework-checkout defect list; stripped via `never_copy_names` |
+| `regenerate-governance-docs.py` | regenerates `docs/agents/*` from a framework checkout / CI; stripped via `never_copy_names` |
+| `__pycache__` / `.selftest*` / `.rgents` | scratch; never ship |
 
 ## The trap this design exists to close
 
-Copying `docs/knowledge/` wholesale ships **the framework's own accumulated facts** into the new
-project. Scaffolding from `.agent/templates/knowledge/` (and the project-baseline template) is the fix.
-Upgrade must not reintroduce that trap: knowledge and baseline stay product-owned forever.
+Copying `docs/knowledge/` or `docs/architecture/` wholesale would ship **the framework's own
+accumulated facts and ADRs** into the new project. Scaffolding from `.agent/templates/knowledge/` and
+`.agent/templates/architecture/` (plus the project-baseline template) is the fix. The same class of
+trap applies to `.agent/framework-known-issues.md`: it is stripped on create so products do not inherit
+the framework defect list. Upgrade must not reintroduce those traps: knowledge, architecture, and
+baseline stay product-owned forever.

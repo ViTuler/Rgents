@@ -107,7 +107,7 @@ specialists:
       - "internal tooling with no end-user surface"
       - "agent_or_framework_docs_only"   # docs/knowledge, AGENTS.md, framework guides — not product UX
       - "ux_spec_is_the_sole_deliverable"  # only docs/ux/*.md (or similar) ships; no ux-report needed
-    stage_position: parallel_with_implementation
+    stage_position: before_implementation
     blocking: false
     # Activation vs skip (S4 / sandbox TASK-005):
     # - Building or changing product UI → activate (triggers above).
@@ -166,7 +166,7 @@ specialists:
       - "data_backfill_or_repair"
     skips_when:
       - "no persistence layer touched"
-    stage_position: parallel_with_implementation
+    stage_position: parallel_with_qa
     blocking: true
     severity_policy:
       critical: block

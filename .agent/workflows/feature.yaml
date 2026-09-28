@@ -55,7 +55,7 @@ stages:
       reads: [requirements.json, design.json]
       description: Flows, state coverage (loading/empty/error/permission), accessibility, copy, responsive behavior.
       condition: specialists includes ux
-      stage_position: parallel_with_implementation
+      stage_position: before_implementation
 
     - id: environment
       agent: orchestrator

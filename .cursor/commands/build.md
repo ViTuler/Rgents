@@ -36,8 +36,9 @@ design both carry schema/DDL detail, `stage_plan` also checks nullability consis
    - writes `worker-result.json` with files changed, real commands and real results,
      acceptance addressed, **deviations**, and **unresolved concerns**
 
-3. Specialists activated with `stage_position: parallel_with_implementation` (`ux`, `database`) run
-   alongside where the plan declares it safe.
+3. When `ux` is activated, `feature` workflow runs `ux_design` **before** implementation
+   (`stage_position: before_implementation`). `database` is **not** parallel with implementation —
+   workflows place `database_review` after implementation (`parallel_with_qa`, alongside QA).
 
 ## The rule that matters most
 

@@ -8,11 +8,14 @@ reconstructing conventions from memory.
 | `agent.md` | define a new role under `.cursor/agents/` |
 | `rule.mdc` | add a rule under `.cursor/rules/` |
 | `skill.md` | add a reusable procedure under `.cursor/skills/<name>/SKILL.md` |
-| `task/` | start a task by hand under `tasks/active/<TASK-ID>/` |
+| `task/` | rare hand-start: follow its README under `tasks/active/<TASK-ID>/` (there is no `tasks/_template/`) |
+| `knowledge/` | product-owned starters → `docs/knowledge/` on seed create |
+| `architecture/` | optional product-owned starters → `docs/architecture/` on seed create (never upgraded) |
+| `project-baseline.yaml` | → `.agent/project-baseline.yaml` on seed create |
 
 ## After adding any of these
 
-Four files must stay in sync. The setup lint checks them, so run it and fix what it reports:
+These registrations must stay in sync. The setup lint checks them, so run it and fix what it reports:
 
 ```bash
 python .agent/tools/validate.py --check-setup
@@ -81,10 +84,10 @@ worse than no matrix, because it is trusted.
 
 ## Extension checklist
 
-- [ ] Role file follows the four-section skeleton (`ROLE`, `PRIMARY OBJECTIVE`, `CORE RESPONSIBILITIES`, `NON-GOALS`)
+- [ ] Role file includes the four **required** sections (`ROLE`, `PRIMARY OBJECTIVE`, `CORE RESPONSIBILITIES`, `NON-GOALS`); also add `DECISION FRAMEWORK` by convention
 - [ ] `description` states when to use the agent
-- [ ] Frontmatter uses only `name`, `description`, `model`, `readonly`
-- [ ] `NON-GOALS` names at least four exclusions, each owned by another role
+- [ ] Frontmatter uses only Cursor-recognised fields: `name`, `description`, `model`, `readonly`, `is_background`
+- [ ] `NON-GOALS` names enough exclusions that validate does not warn (warns when fewer than **3**; aim for clear role separation)
 - [ ] Registered in `.agent/config.yaml` if it is a role
 - [ ] Artifact has a schema, a contract entry, and a row in `AGENTS.md` if it produces one
 - [ ] `python .agent/tools/validate.py --selftest` still passes
